@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "gym-coach",
+  "displayName": "Gym Coach",
+  "description": "An evidence-based strength coach that remembers. Notion-backed training log, per-session progression computed from logged history, and weekly volume verification. Requires the Notion connector.",
+  "version": "0.1.0",
+  "author": {
+    "name": "AriyanAzami",
+    "url": "https://github.com/AriyanAzami"
+  },
+  "homepage": "https://github.com/AriyanAzami/gym-coach",
+  "repository": "https://github.com/AriyanAzami/gym-coach",
+  "license": "MIT",
+  "keywords": ["fitness", "strength-training", "hypertrophy", "workout-log", "coaching", "notion"],
+  "skills": "./skills/"
+}

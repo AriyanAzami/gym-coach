@@ -1,0 +1,22 @@
+# A user's Notion IDs and personal profile must never be committable by accident.
+*.local.json
+gym-coach.config.json
+.gym-coach/
+gym-coach-data/
+
+# Personal training data
+*.private.md
+scratch/
+my-*.md
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*~
+
+# Build spec — not part of the shipped plugin
+BUILD-PLAN-gym-coach-plugin.md
