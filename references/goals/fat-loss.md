@@ -8,8 +8,11 @@ Load with `safety.md` and `programming.md`. Safety is identical in every mode
 (`safety.md` §8), and in this mode the nutrition floors are the primary publication
 gate rather than a footnote.
 
-> **Read `safety.md` §8.1 before running this mode.** The disordered-eating boundary is
-> written there as the canonical text. This profile does not restate it; it enforces it.
+> **Read `safety.md` §8.1 before running this mode.** The disordered-eating boundary —
+> the signals, the response, and the wording — is written there as the canonical text.
+> This profile does not restate it; it enforces it. It applies whether or not the
+> athlete names eating as a problem, and it outranks every programming decision on this
+> page.
 
 ---
 

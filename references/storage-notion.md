@@ -60,9 +60,13 @@ was used.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "units": "metric",
+  "goalMode": "hypertrophy",
+  "equipmentTier": "full-gym",
   "createdAt": "2026-08-21",
+  "goalModeSetAt": "2026-08-21",
+  "targetsReviewedAt": null,
   "notion": {
     "parentPageId": "…",
     "gymLogDataSourceId": "…",
@@ -76,10 +80,48 @@ was used.
 It stores **pointers and preferences only**. No training data, no personal facts.
 Everything about the athlete lives in Notion.
 
-`units` is `metric` or `imperial` and controls display everywhere.
+| Field | Values | Controls |
+|---|---|---|
+| `units` | `metric` · `imperial` | Display everywhere |
+| `goalMode` | `hypertrophy` · `strength` · `fat-loss` · `general-fitness` · `endurance-hybrid` | Which `references/goals/<mode>.md` every skill loads |
+| `equipmentTier` | `full-gym` · `barbell-home` · `dumbbell-home` · `minimal` · `bodyweight` | Exercise selection and the progression variable (`exercise-library.md` §10) |
+| `goalModeSetAt` | ISO date | When the current mode was chosen. `audit` uses it to segment history across a mode change |
+| `targetsReviewedAt` | ISO date or `null` | Last time targets were reviewed. **The targets themselves live in the operating manual (§8), never here** |
 
-> **Store the unit alongside every number. Never write a bare figure.** `90 lb`, not
-> `90`. A weight without a unit in a log is unrecoverable a year later.
+**Nothing about targets goes in the config beyond `targetsReviewedAt`.** Targets are
+the athlete's data; the config holds pointers and preferences.
+
+> **Store the unit alongside every number. Never write a bare figure.** `41 kg`, not
+> `41`. A weight without a unit in a log is unrecoverable a year later.
+
+### 2.1 Migration from version 1 — and it must be silent
+
+A `version: 1` config is read as:
+
+| Missing field | Read as |
+|---|---|
+| `goalMode` | `"hypertrophy"` |
+| `equipmentTier` | `"full-gym"` |
+| `goalModeSetAt` | the config's `createdAt` |
+| `targetsReviewedAt` | `null` |
+
+Then rewritten as `version: 2` **on the next write the skill was going to make
+anyway**. Not on read — `today` and `checkin` are read-only and stay read-only.
+
+> **No prompt. No interruption. No behaviour change. An existing user must not notice
+> the rebuild happened.**
+>
+> Do not announce the migration, do not ask which mode they want, do not print a
+> "you've been upgraded" line. Their defaults are exactly what they were already
+> getting, and the first they should hear about goal modes is when they go looking for
+> them.
+
+A config with no `version` field at all is treated as version 1.
+
+If the athlete later wants a different mode, that is `setup` → **change your training
+goal** (`skills/setup` Step 0.5), which is an explicit choice, dated in
+`goalModeSetAt`.
+
 
 ### The rule every skill obeys
 
@@ -129,7 +171,7 @@ user's chosen page.
 CREATE TABLE (
   "Session" TITLE,
   "Date" DATE,
-  "Session Type" SELECT('Upper':blue, 'Lower':orange, 'Full Body':green, 'Other':gray),
+  "Session Type" SELECT('Upper':blue, 'Lower':orange, 'Full Body':green, 'Endurance':purple, 'Other':gray),
   "Duration (min)" NUMBER,
   "Calories" NUMBER,
   "Avg HR" NUMBER,
@@ -143,6 +185,16 @@ CREATE TABLE (
 **The exercise table goes in the page body, not in properties.** Notion properties
 cannot represent a variable-length list of exercises, and trying to force it produces
 a schema nobody can read.
+
+> **`Endurance` on an existing workspace.** A database provisioned before v0.2.0 has no
+> `Endurance` option on `Session Type`. When `endurance-hybrid` mode needs it,
+> **add the option to the select — do not fail, and do not write `Other` instead.**
+> Update the data source's schema, then write the entry. If the schema update is
+> refused, write the entry with `Session Type = Other` and put `Endurance` as the first
+> word of `Coach Notes`, and say that is what you did.
+>
+> An endurance entry is **context, not a lifting session**: it does not advance the
+> rotation, and `today` ignores it when working out which day is next.
 
 ### Training Blocks
 
@@ -345,7 +397,62 @@ updated in place is the operating manual and a block's `Status`.
 
 ---
 
-## 8. Tool-name drift
+## 8. Targets — the operating manual's Targets section
+
+**Targets live in a section of the Coach Operating Manual page. There is no fourth
+database.** Provisioning stays at three databases and one page, and it stays that way
+because a fourth object is a fourth thing to break, migrate, and lose.
+
+`setup` writes the section (empty is a valid state). `checkin` reads it and updates
+`current_value`. `audit` reads it for target alignment. `block` reads it to check the
+programmed work serves it.
+
+### Exact shape
+
+```markdown
+## Targets
+
+*Reviewed 2026-09-27. Up to three. Revisable at any check-in.*
+
+| # | Name | Metric | Start | Current | Target | By | Source |
+|---|---|---|---|---|---|---|---|
+| 1 | Squat e1RM | e1RM, kg | 112 (2026-08-30) | 121 (2026-09-27) | 140 | 2027-03-15 | log |
+| 2 | Bodyweight | kg | 84.0 (2026-08-30) | 82.1 (2026-09-27) | 78.0 | 2027-01-10 | body-metrics |
+| 3 | Fit the grey jacket | self-reported | Tight (2026-08-30) | Tight (2026-08-30) | Comfortable | 2027-01-10 | manual *(self-reported)* |
+```
+
+### Field rules
+
+| Field | Rule |
+|---|---|
+| `name` | The athlete's words, kept short |
+| `metric` | The unit the number is in. `sessions/week`, `kg`, `e1RM, kg`, `self-reported` |
+| `start_value` | With the ISO date it was taken. **Never backfilled or re-baselined** — a moved start line is a hidden goal change |
+| `current_value` | With the ISO date of the reading it came from. Updated by `checkin` |
+| `target_value` | The number being aimed at |
+| `target_date` | ISO |
+| `source` | Exactly one of `log` · `body-metrics` · `manual` |
+
+**`source` decides who owns the number:**
+
+- `log` — derived from a lift's e1RM or working load. The coach updates it.
+- `body-metrics` — derived from the 3-week rolling weight average. The coach updates it.
+- `manual` — anything the coach cannot observe: a photo goal, a clothing fit, a race
+  time run elsewhere. **Labelled as self-reported everywhere it appears**, in the table
+  and in every check-in line that prints it.
+
+**A `manual` target with no update in 4 weeks gets one reminder, then goes quiet.** Do
+not ask again after that; if it matters, the athlete will bring it up.
+
+`targetsReviewedAt` in the config records when this section was last reviewed. Nothing
+else about targets is stored outside Notion.
+
+**"No target set" is a valid and complete state.** Write the section with that line in
+it rather than leaving it out, so a later run can tell "declined" from "never asked".
+
+---
+
+## 9. Tool-name drift
 
 The Notion connector's tool names have moved before and may move again. The names used
 here — `notion-search`, `notion-fetch`, `notion-create-pages`, `notion-create-database`,
