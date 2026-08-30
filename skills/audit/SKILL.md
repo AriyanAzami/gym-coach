@@ -38,11 +38,57 @@ Say what you can and cannot see:
 
 **Never fill a gap with an assumption you have not named.**
 
+**Read `config.goalMode` and load `${CLAUDE_PLUGIN_ROOT}/references/goals/<mode>.md`**,
+plus `config.goalModeSetAt` and `config.equipmentTier`. No `goalMode` means
+`hypertrophy` — read it that way, silently. **The mode decides what counts as a defect**,
+and auditing a history against the wrong mode's targets produces a confident wrong
+answer (see §1 and §0.5).
+
+If there is **no config** — an imported history from elsewhere — there is no mode
+either. **Ask which of the five the athlete was training for**, in one line, before
+computing a volume verdict. If they do not know or do not answer, audit against
+`general-fitness` (coverage and consistency, the lowest bar) and **say that is what you
+did and why**. Never grade an unknown history against the hypertrophy target and call
+it a finding.
+
 ---
 
-## 1. Volume audit
+## Step 0.5 — does the history span a goal-mode change?
 
-**A table of actually-completed sets per muscle per week, against the ≥10 target.**
+**Check `goalModeSetAt` against the date range of the history.** If the history starts
+before it, the athlete changed modes mid-way, and the two segments are not comparable.
+
+> **Say so, and analyse the segments separately.** Comparing a strength block to a
+> hypertrophy block on sets per muscle per week produces a confident wrong answer — the
+> strength block will look starved, because it was never trying to do that.
+
+```
+This history spans a goal-mode change on 2026-09-27 (hypertrophy -> strength).
+I'm splitting it:
+
+  Mar 3 - Sep 26   hypertrophy   28 sessions   graded on sets/muscle/week
+  Sep 27 - Dec 14  strength      22 sessions   graded on exposures and heavy sets
+
+Cross-segment comparisons below are labelled. Anything not labelled is within
+one segment.
+```
+
+Grade each segment against **its own** mode's rules. Where a trend genuinely crosses
+the boundary — bodyweight, adherence, pain history — say that it does and report it
+whole. Never average a volume number across the boundary.
+
+## 1. Volume audit — against the mode's `volume_rule`
+
+**A table of actually-completed work per week, against the target the active profile
+sets.** What is counted, and what it is compared to, comes from the mode:
+
+| Mode | The table | The target |
+|---|---|---|
+| `hypertrophy` | Completed sets per muscle per week | **≥10** |
+| `fat-loss` | Completed sets per muscle, plus total vs the pre-deficit period | **≥8**, and **≥80%** of pre-deficit total |
+| `strength` | Exposures/week and heavy sets/week per priority lift | **≥2** and **≥4** |
+| `general-fitness` | The eight movement patterns, by weekly frequency | **All eight present.** Sets vs ≥6 is a warning |
+| `endurance-hybrid` | Sets per priority muscle, plus interference-rule violations by date | **≥6**, and **zero** violations |
 
 > **Count completed work, not programmed work.** This is the whole trick. A plan can
 > program 12 sets of rear delts and deliver 4, and every other symptom the athlete has
@@ -110,19 +156,21 @@ dates.
 
 ```
 Lift                  First     Last      Sessions   Verdict
-Lat Pulldown          70 lb     95 lb        21      Progressing
-Seated Cable Row      70 lb     95 lb        21      Progressing
-Chest Press           85 lb     85 lb        14      STALLED 14 sessions
-Cable Shrug          100 lb    100 lb        11      STALLED 11 sessions
-Leg Press            270 lb    250 lb         9      REGRESSED
+Lat Pulldown          32 kg     43 kg        21      Progressing
+Seated Cable Row      32 kg     43 kg        21      Progressing
+Machine Chest Press   39 kg     39 kg        14      STALLED 14 sessions
+Cable Shrug           45 kg     45 kg        11      STALLED 11 sessions
+Leg Press            122 kg    113 kg         9      REGRESSED
 ```
+
+*(Fabricated example.)*
 
 Then **cross-reference every stall against two specific causes:**
 
 - **Logging gaps** — a lift with no recorded history for six weeks is not stalled, it is
   unmeasured. Say which.
 - **Plan-side "hold until" bugs** — search the plan for conditional holds
-  (*"hold 85 lb until 12 reps are clean"*). **These are the single most common
+  (*"hold 41 kg until 12 reps are clean"*). **These are the single most common
   plan-side cause of a mass stall**, because they require someone to re-read the
   trigger every session and nobody does.
 
@@ -161,12 +209,14 @@ If adherence genuinely is the problem, say so just as plainly, and look for the 
 
 ---
 
-## 5. Goal alignment
+## 5. Goal alignment — and target alignment
 
-**Compare the stated priority muscles against actual completed volume.**
+**Compare the stated priorities against actual completed volume.** Priorities are
+muscles in `hypertrophy` and `fat-loss`, **lifts** in `strength`, and **movement
+patterns** in `general-fitness`.
 
 ```
-Stated goal: broader shoulders. Priority: side delts > rear delts > traps > lats.
+Stated goal: wider-looking shoulders. Priority: side delts > rear delts > traps > lats.
 
 Actual completed volume, last 8 weeks:
   Side delts    8.5 sets/wk    below target
@@ -179,8 +229,40 @@ The four muscles that would make your shoulders look broader received less combi
 volume than chest and quads. That is the finding.
 ```
 
+*(Fabricated example.)*
+
 **This is usually the one that changes everything.** It is also usually a surprise, so
 show the numbers rather than asserting it.
+
+### Target alignment
+
+**If the operating manual has targets** (`storage-notion.md` §8), this section gets
+sharper: it is the same finding with a number to aim at.
+
+For each target, answer one question: **does the programmed work actually serve it?**
+
+```
+TARGET — Squat e1RM 140 kg by Mar 15     (start 112 kg, now 121 kg, 47% there)
+
+  Squat exposures        1.2/week over the block, against the 2 the mode requires
+  Heavy sets (>=80%)     2.6/week, against 4
+  Observed rate          2.2 kg/week over 4 weeks -> projected 138 kg by Mar 15
+
+  The target is reachable and the programming is the constraint, not the athlete.
+  One more squat exposure a week is the whole fix.
+```
+
+Rules, the same as `checkin` line 6:
+
+- **No projection from fewer than 3 data points spanning 3 weeks.** Say so and stop.
+- **State the observed rate and its window**, always.
+- **`manual` targets are labelled self-reported** wherever they appear.
+- **If the programmed work does not serve the target, say so plainly** — and say whether
+  the target, the plan, or the date is the thing that should move. Do not silently
+  reinterpret the target as something the plan already achieves.
+- **If the target and the goal mode disagree** — a fat-loss target under a hypertrophy
+  mode, a race time under a strength mode — that is the finding, and it belongs at the
+  top of §6. Point at `/gym-coach:setup` → *change your training goal*.
 
 ---
 
@@ -246,6 +328,10 @@ the audit's findings will carry into the first block.
 ## Rules for this skill
 
 - **Completed sets, never programmed sets**, in the volume audit.
+- **Audit against the mode's rules, not hypertrophy's.** If the mode is unknown, ask;
+  if it stays unknown, use `general-fitness` and say so.
+- **Never grade across a goal-mode boundary.** Split the history, label the segments,
+  and report only the trends that genuinely cross it as whole.
 - Name every inference you made from incomplete data.
 - Grade adherence and plan quality separately, always.
 - Every item on the fix list traces to a number.
