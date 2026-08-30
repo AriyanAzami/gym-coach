@@ -13,7 +13,7 @@ Format per `references/storage-notion.md` §5. All example values are **fabricat
 |---|---|---|---|
 | `Session` | Title | `2026-08-26 — Day 2 BACK` | **`YYYY-MM-DD — Day N NAME`.** The rotation day must be recoverable from the title |
 | `Date` | Date | `2026-08-26` | ISO. Always |
-| `Session Type` | Select | `Upper` | Upper · Lower · Full Body · Other |
+| `Session Type` | Select | `Upper` | Upper · Lower · Full Body · **Endurance** · Other. `Endurance` is a context entry and does not advance the rotation |
 | `Duration (min)` | Number | `46` | Actual, not planned |
 | `Calories` | Number | `312` | Active calories if available. Blank is fine |
 | `Avg HR` | Number | `118` | Blank is fine |
@@ -90,6 +90,69 @@ Had not occurred on this movement before. Still present 2 h after the session.
 
 **A pain entry with `sharp` and `still present` triggers the `safety.md` escalation
 check.** The log records it; the coach's reply escalates.
+
+### Example D — `strength` mode, with a top set and e1RM
+
+Rae's Day 1. **The top set is recorded separately from the back-off sets**, and its
+Epley e1RM is written into the body so `checkin` reads it rather than recomputing.
+
+```markdown
+| Exercise | Sets | Reps | Weight | Notes |
+|---|---|---|---|---|
+| Back Squat | 4 | 4 | 102.5 kg | top set 102.5 kg × 4 @RPE 8 · e1RM 116 kg (Epley) |
+| Romanian Deadlift | 4 | 8 | 80 kg | ↑ from 77.5 |
+| Leg Press | 3 | 10 | 160 kg | 3×9 last time — reps built, load holds |
+
+**Progressed:** back squat 100 → 102.5 kg (e1RM 113 → 116 kg) · RDL 77.5 → 80 kg
+**Stalled:** none
+**Skipped:** none
+**Micro-goal:** 4×4 at 105 kg next Day 1 if the top set stays at or under RPE 8
+```
+
+Rules for this shape:
+
+- **e1RM is Epley** — `weight × (1 + reps/30)` — computed from the **top set only**,
+  never from a back-off set and never averaged across sets.
+- **Write the number, and write `(Epley)` beside it.** It is an estimate and a trend.
+  It is not a max, and it is never a reason to attempt one.
+- **A missed session records the miss, not a rounded-down success.** `4 | 4,4,3,3` with
+  a note, so the two-consecutive-misses reset can actually fire.
+
+### Example E — an endurance context entry (`endurance-hybrid` mode)
+
+The athlete reported a run. **This is context, not a prescription** — this coach does
+not write the endurance program, and this entry **does not advance the lifting
+rotation**.
+
+| Property | Value |
+|---|---|
+| `Session` | `2026-09-04 — Endurance Long Run` |
+| `Date` | `2026-09-04` |
+| `Session Type` | `Endurance` |
+| `Duration (min)` | `68` |
+| `Effort (1-10)` | `5` |
+| `Coach Notes` | `Athlete's label: "long, easy". Context entry — rotation unchanged` |
+
+```markdown
+**Endurance session — context only.**
+
+Type: long run · Duration: 68 min · Athlete's label: "long, easy"
+
+**Progressed:** n/a — endurance sessions are logged, not programmed here
+**Stalled:** n/a
+**Skipped:** none
+**Micro-goal:** none — the lifting rotation is unchanged; next lifting session is Day 2
+```
+
+- **`Session Type = Endurance`.** If the database predates v0.2.0 and lacks the option,
+  **add the option to the select** — do not fail, and do not silently write `Other`
+  (`storage-notion.md` §4).
+- **Record the athlete's own label**, verbatim. Do not translate "long, easy" into a
+  zone, a pace, or a percentage of anything.
+- **Duration and label are all that is needed.** Do not ask for splits, heart-rate
+  zones, or a route.
+- **The rotation does not advance**, and the entry says so on its own face, so nobody —
+  including a future `today` — mistakes it for a lifting day.
 
 ---
 

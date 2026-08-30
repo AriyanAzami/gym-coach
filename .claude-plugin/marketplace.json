@@ -5,14 +5,26 @@
     "name": "AriyanAzami",
     "url": "https://github.com/AriyanAzami"
   },
-  "description": "Gym Coach — an evidence-based strength coach for Claude",
+  "description": "Gym Coach — a training coach that remembers, for Claude",
   "plugins": [
     {
       "name": "gym-coach",
       "source": "./",
-      "description": "Evidence-based strength coaching with persistent storage",
+      "description": "Goal-driven training coaching with persistent Notion storage — five selectable goal profiles behind one engine",
       "license": "MIT",
-      "keywords": ["fitness", "strength-training", "hypertrophy", "workout-log", "coaching", "notion"]
+      "keywords": [
+        "fitness",
+        "strength-training",
+        "hypertrophy",
+        "strength",
+        "fat-loss",
+        "general-fitness",
+        "hybrid",
+        "progressive-overload",
+        "workout-log",
+        "coaching",
+        "notion"
+      ]
     }
   ]
 }

@@ -13,7 +13,7 @@ All example values are **fabricated**.
 
 # Coach Operating Manual — Sam
 
-*Generated 2026-08-21 by Gym Coach v0.1.0. Updated 2026-08-21.*
+*Generated 2026-08-21 by Gym Coach v0.2.0. Updated 2026-08-21.*
 
 > **This is not medical advice, and Gym Coach is not a medical professional.** See
 > "Medical status and escalation policy" below, and consult a doctor before starting
@@ -107,9 +107,16 @@ form tools available.
 
 ---
 
-## 5. Goals and priority order
+## 5. Goal mode, priority order, and what this coach will not do
 
-**Stated goal:** "Look broader in a t-shirt."
+**Goal mode: `hypertrophy`** — set 2026-08-21.
+
+**Stated goal:** "Look broader in a t-shirt. Not bothered about numbers."
+
+**Why this mode:** a physique outcome in named areas, with no interest in numbers on
+the bar. Confirmed before it was recorded.
+
+**Secondary goal:** none stated.
 
 **Priority ranking — drives ordering in every session:**
 
@@ -122,6 +129,60 @@ form tools available.
 
 The lagging priority muscle goes **first** in every session it appears in. Core and
 mobility live in the warm-up.
+
+> **In `strength` mode this section ranks lifts instead**, and the ordering rule is
+> **main lift first**, which deliberately overrides lagging-muscle-first.
+> `general-fitness` ranks nothing and lists the eight movement patterns.
+> `endurance-hybrid` names the quality being protected.
+
+### What this coach will not do, in this mode
+
+*(Copied in full rather than referenced, so it survives the plugin being deleted.)*
+
+- Peak you for a meet, or pick your attempts
+- Program to failure by default
+- Chase a weekly frequency target once volume is equated
+- Program a max single
+- Prescribe a calorie deficit — that is a different mode, and it will be offered rather
+  than half-run here
+
+**Changing the mode:** `/gym-coach:setup` → *change your training goal*. Every log entry
+and every workspace ID survives it. The change is dated, past history is never
+reinterpreted under the new rules, and a `/gym-coach:block` rebuild is required.
+
+---
+
+## 5b. Equipment tier
+
+**Tier: `full-gym`.**
+
+*One of `full-gym` · `barbell-home` · `dumbbell-home` · `minimal` · `bodyweight`.*
+
+**What this tier reaches, and what it does not:** a full commercial gym reaches every
+muscle; there are no tier gaps to record. In a lower tier, the honest gaps go here —
+and in `minimal` or `bodyweight`, so does the note that **progression runs on reps,
+tempo, leverage and unilateral work rather than load**, and that the session sheet
+prints that variable where a weight would normally go.
+
+---
+
+## 5c. Targets
+
+**Up to three, with a date. Revisable at any check-in.** *Reviewed 2026-09-18.*
+
+| # | Name | Metric | Start | Current | Target | By | Source |
+|---|---|---|---|---|---|---|---|
+| 1 | Lateral raise 3×15 | kg | 8 (2026-08-21) | 10 (2026-09-18) | 14 | 2027-02-01 | log |
+| 2 | Bodyweight | kg | 79.5 (2026-08-21) | 80.1 (2026-09-18) | 83.0 | 2027-03-01 | body-metrics |
+
+**"No target set" is a valid entry.** Write that line rather than leaving the section
+out, so a later run can tell "declined" from "never asked".
+
+**How these are reported:** every check-in gives start → now → target, the percentage
+there, and the observed rate with the window it was measured over. **No projection is
+made from fewer than 3 readings spanning 3 weeks.** A missed target is said once,
+plainly, with a revised date offered. A `manual` target is labelled self-reported
+wherever it appears.
 
 ---
 
@@ -148,7 +209,9 @@ it would have carried has been reallocated.
 - **No weights are stored in the plan.** Every session's number is computed fresh from
   the last logged entry for that exact lift. That is why the log matters.
 - **Stall rule:** same weight *and* same reps for 3 sessions → (1) move it earlier,
-  (2) add a set, (3) change the variation. Never just re-prescribe it.
+  (2) add a set, (3) change the variation. Never just re-prescribe it. *(The trigger is
+  the mode's: 2 missed sessions on a main lift in `strength`, 3 sessions of declining
+  load in `fat-loss`, 4 sessions in `general-fitness`.)*
 - **Flagged movements** progress by the smallest increment only, with two clean sessions
   per step.
 
@@ -158,11 +221,16 @@ it would have carried has been reallocated.
 
 - Exercise count is **arithmetic**: `warmup(5 min) + Σ(sets × (45 s + rest))` must fit
   the actual mean session duration. It is recomputed every block and is allowed to fall.
-- **Lagging priority muscle first**, then compounds, then isolation.
+- **Lagging priority muscle first**, then compounds, then isolation. *(This is the
+  `hypertrophy` rule. In `strength` the main lift goes first instead; in
+  `general-fitness` the hardest compound does; in `endurance-hybrid` the decision is
+  made across the week rather than within the session.)*
 - The **top three exercises are non-negotiable**; cut from the bottom when short on time.
 - Never program more than the arithmetic allows.
-- No supersetting primary compounds.
+- No supersetting primary compounds — and never a main lift.
 - Deload at ~6 weeks: one week at ~60% of the set count, same weights. Scheduled.
+  *(`strength` every 4–6 weeks keeping one moderate top set; `endurance-hybrid` every
+  4 weeks; `general-fitness` schedules none — missed weeks are the deload.)*
 
 ---
 
@@ -197,8 +265,13 @@ bodyweight lost per week.
 
 ## 11. Progress verification
 
-- **Weekly set volume per muscle is computed and shown before any plan ships.** A
-  priority muscle under 10 sets/week is a defect that blocks publication.
+- **Weekly volume is computed and shown before any plan ships**, against this mode's
+  target. In `hypertrophy` that is ≥10 direct sets per muscle per week, and a priority
+  muscle under it is a defect that blocks publication. Other modes gate on exposures and
+  heavy sets, on movement-pattern coverage, or on the interference rule — whichever
+  their profile names.
+- **Target progress is reported at every check-in**, with the observed rate and the
+  window it was measured over. Never projected from fewer than 3 readings over 3 weeks.
 - Bodyweight: 3-week rolling average, same conditions each time.
 - Waistband check: Looser / Same / Tighter, same trousers, same time of day.
 - Photos: monthly, same lighting and pose.

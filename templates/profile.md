@@ -27,7 +27,24 @@ All example values are **fabricated**.
 
 ## Goal
 
+**Goal mode:** `hypertrophy`  ·  **set** 2026-08-21
+
 **Stated goal (their words):** "Look broader in a t-shirt. Not bothered about numbers."
+
+**Why this mode:** they described a physique outcome in named areas and explicitly did
+not care about numbers on the bar. Confirmed with them before it was recorded.
+
+**Secondary goal, if any:** none stated.
+
+> **The mode decides what the rest of this section looks like.** The shape below is
+> `hypertrophy`. **`strength` ranks lifts instead of muscles** — `squat > bench >
+> deadlift` — because the unit of progress is load on a lift, not size of a muscle.
+> `general-fitness` ranks **nothing** and records "covers all eight movement patterns".
+> `endurance-hybrid` records **which quality is being protected** and which of the
+> athlete's own endurance sessions are the hard or long ones.
+>
+> Fill the shape the active mode calls for. Do not fill a hypertrophy ranking for a
+> strength athlete — it will drive ordering, and it will drive it wrong.
 
 **Ranked priority muscles** — drives exercise ordering in every session, forever, until
 the athlete changes it:
@@ -43,6 +60,35 @@ the athlete changes it:
 
 > "Broad shoulders" is not a program. A ranking is. If the athlete cannot rank, offer
 > a forced choice: *"If only one of these grew this year, which one?"*
+
+### What this mode will not do
+
+*(Copied verbatim from the profile's `will_not_do` list, so it survives the plugin
+being uninstalled. This one is `hypertrophy`'s.)*
+
+- Peak for a meet, or select attempts
+- Program to failure by default
+- Chase a weekly frequency target once volume is equated
+- Program a max single
+- Prescribe a calorie deficit — that is `fat-loss` mode, offered rather than half-run
+
+---
+
+## Targets
+
+**One to three, with a date.** "No target set" is a complete and valid answer — record
+it rather than inventing one. Full field rules in `storage-notion.md` §8.
+
+| # | Name | Metric | Start | Current | Target | By | Source |
+|---|---|---|---|---|---|---|---|
+| 1 | Lateral raise 3×15 | kg | 8 (2026-08-21) | 10 (2026-09-18) | 14 | 2027-02-01 | log |
+| 2 | Bodyweight | kg | 79.5 (2026-08-21) | 80.1 (2026-09-18) | 83.0 | 2027-03-01 | body-metrics |
+
+**Reviewed:** 2026-09-18.
+
+A `manual` target — a photo goal, a clothing fit, a race time run elsewhere — is
+**labelled self-reported everywhere it appears**, and goes quiet after one reminder if
+it has not been updated in four weeks.
 
 ---
 
@@ -67,6 +113,17 @@ every block from the *actual mean logged duration*, not from this stated figure.
 ---
 
 ## Equipment
+
+**Equipment tier:** `full-gym`
+
+*One of: `full-gym` · `barbell-home` · `dumbbell-home` · `minimal` · `bodyweight`. It
+restricts exercise selection and, in the two lowest tiers, changes the progression
+variable from load to reps/tempo/leverage (`exercise-library.md` §10). Ask it **before**
+the missing-machine questions — it answers most of them.*
+
+**Honest gaps for this tier:** none. A full commercial gym reaches every muscle. In
+lower tiers, record the gaps here in the athlete's own terms — e.g. for
+`barbell-home`: *"no real side-delt option; bands or light dumbbells would fix it."*
 
 **Gym type:** commercial gym, full machine floor.
 
