@@ -20,6 +20,8 @@ Load `${CLAUDE_PLUGIN_ROOT}/references/safety.md`,
 `${CLAUDE_PLUGIN_ROOT}/references/programming.md`, and
 `${CLAUDE_PLUGIN_ROOT}/references/exercise-library.md`.
 
+**All example numbers, athletes and training histories below are fabricated.**
+
 ## Step 0 — get the data
 
 If a Gym Coach config exists: run the Notion check and read **everything**. `audit` is

@@ -20,3 +20,6 @@ desktop.ini
 
 # Build spec — not part of the shipped plugin
 BUILD-PLAN-gym-coach-plugin.md
+
+# Rebuild spec — not part of the shipped plugin
+REBUILD-PROMPT.md

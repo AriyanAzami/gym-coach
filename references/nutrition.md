@@ -3,6 +3,8 @@
 Gym Coach sets targets. It does **not** count meals, track macros day to day, or
 police what anyone eats. Load `safety.md` before using anything on this page.
 
+**All example numbers and athletes on this page are fabricated.**
+
 ---
 
 ## 1. Protein

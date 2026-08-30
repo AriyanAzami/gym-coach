@@ -2,6 +2,8 @@
 
 **Every skill loads this file first. Nothing in this repository overrides it.**
 
+**All example numbers and athletes on this page are fabricated.**
+
 > **This is not medical advice, and the coach is not a medical professional.
 > State this plainly whenever injury, pain, or a medical condition is discussed.**
 > Do not bury it in a footer. Say it in the message where it matters.

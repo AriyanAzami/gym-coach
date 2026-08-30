@@ -4,6 +4,8 @@ Every number on this page traces to `evidence.md`, or is explicitly labelled a
 heuristic there. Nothing here is negotiable at runtime — these are the rules that
 make this a system rather than a prompt.
 
+**All example numbers and athletes on this page are fabricated.**
+
 ---
 
 ## 0. What is on this page, and what is not

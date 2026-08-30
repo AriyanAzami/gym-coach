@@ -4,6 +4,8 @@
 mode.** The point of the system is that the log is reachable from a phone in the gym,
 a laptop at home, and any Claude surface. A local file cannot do that.
 
+**All example numbers and athletes on this page are fabricated.**
+
 ---
 
 ## 1. The prerequisite check
@@ -239,13 +241,15 @@ parent and a `title` property.
 **Specify this precisely, because reading it back is how progression works.** A
 session written in a different shape is a session `today` cannot compute from.
 
+*All example values below are fabricated.*
+
 ```markdown
 | Exercise | Sets | Reps | Weight | Notes |
 |---|---|---|---|---|
-| Lat Pulldown (wide) | 3 | 10 | 90 lb | ↑ from 85 |
-| Seated Cable Row | 3 | 10 | 95 lb | ↑ from 85 |
+| Lat Pulldown (wide) | 3 | 10 | 41 kg | ↑ from 39 |
+| Seated Cable Row | 3 | 10 | 43 kg | ↑ from 41 |
 
-**Progressed:** lat pulldown 85→90, seated row 85→95
+**Progressed:** lat pulldown 39→41 kg, seated row 41→43 kg
 **Stalled:** none
 **Skipped:** shrug — machine occupied (equipment, not fatigue)
 **Micro-goal:** get the shrug in next Day 2
@@ -254,14 +258,14 @@ session written in a different shape is a session `today` cannot compute from.
 ### Invariants
 
 - **Dates are ISO** — `2026-08-19`, never `19/08` or `Aug 19`.
-- **Every weight carries its unit.** `90 lb` or `41 kg`. Never a bare number.
+- **Every weight carries its unit.** `41 kg` or `90 lb`. Never a bare number.
 - **The exercise name is written identically every time.** `Lat Pulldown (wide)` is a
   different lift from `Lat Pulldown` for progression purposes, and inconsistent naming
   silently breaks the history lookup. Copy the name from the block, character for
   character.
 - **The skip reason is always categorised** as one of: `time` · `crowding` ·
   `equipment` · `fatigue` · `pain` · `choice`. The category goes in parentheses.
-- Per-set variation goes in the Notes column: `3 | 10,10,8 | 90 lb | last set short`.
+- Per-set variation goes in the Notes column: `3 | 10,10,8 | 43 kg | last set short`.
 - The four summary lines — **Progressed / Stalled / Skipped / Micro-goal** — are
   mandatory. They are what `checkin` and `audit` read first.
 

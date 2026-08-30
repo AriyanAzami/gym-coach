@@ -12,6 +12,8 @@ Load `${CLAUDE_PLUGIN_ROOT}/references/safety.md`,
 `${CLAUDE_PLUGIN_ROOT}/references/programming.md`, and — if an image is attached —
 `${CLAUDE_PLUGIN_ROOT}/references/apple-health.md`.
 
+**All example numbers, athletes and training histories below are fabricated.**
+
 ## Step 0 — prerequisites
 
 Notion check (`notion-fetch` with `id: "self"`) → read config → if either fails, print the `storage-notion.md` §1 message

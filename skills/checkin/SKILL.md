@@ -17,6 +17,8 @@ Load `${CLAUDE_PLUGIN_ROOT}/references/safety.md`,
 `${CLAUDE_PLUGIN_ROOT}/references/programming.md`, and
 `${CLAUDE_PLUGIN_ROOT}/references/nutrition.md`.
 
+**All example numbers, athletes and training histories below are fabricated.**
+
 ## Step 0 — prerequisites
 
 Notion check (`notion-fetch` with `id: "self"`) → read config → stop with the appropriate message if either fails.

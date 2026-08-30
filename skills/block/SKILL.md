@@ -15,6 +15,8 @@ Load `${CLAUDE_PLUGIN_ROOT}/references/safety.md`,
 `${CLAUDE_PLUGIN_ROOT}/references/exercise-library.md`, and
 `${CLAUDE_PLUGIN_ROOT}/references/storage-notion.md`.
 
+**All example numbers, athletes and training histories below are fabricated.**
+
 ## Step 0 — prerequisites
 
 Notion check (`notion-fetch` with `id: "self"`) → read config → stop with the appropriate message if either fails.

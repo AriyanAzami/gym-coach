@@ -8,6 +8,8 @@ Depth is deliberately uneven. The muscles most often named as priorities and mos
 often under-trained in practice — **side delts, rear delts, traps, lats** — are
 covered deepest.
 
+All example numbers on this page are **fabricated**.
+
 ---
 
 ## 1. Shoulders
@@ -32,9 +34,10 @@ exercises. Going heavy on lateral raises turns them into a trap shrug.
 
 ### Rear delts
 
-The classic zero-volume muscle. In the training audit this repo was built from, rear
-delts received roughly **one set per week for three weeks** while the athlete's stated
-goal was broader shoulders. This is the single most common finding `audit` produces.
+The classic zero-volume muscle. In the training history this repo was built by
+auditing, rear delts received roughly **one set per week for three weeks** while they
+sat at the top of the athlete's own priority list. This is the single most common
+finding `audit` produces.
 
 | Exercise | Type | Notes |
 |---|---|---|

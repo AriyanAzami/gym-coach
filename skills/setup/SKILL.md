@@ -16,6 +16,8 @@ Before anything else, load:
 - `${CLAUDE_PLUGIN_ROOT}/references/goals/README.md` — the five modes and the contract
   between them. **The specific profile is loaded in Round 2, once the mode is known.**
 
+**All example numbers, athletes and training histories below are fabricated.**
+
 ---
 
 ## Step 0 — the Notion prerequisite check
