@@ -190,6 +190,34 @@ the same muscle and **say that you did it and why**. A silently dropped exercise
 silently dropped 3 sets, and that is exactly how a priority muscle ends up at 4
 sets/week.
 
+### 7.1 Substitutions for the home tiers
+
+The table above assumes a full gym missing one machine. **A home gym is missing a whole
+category**, so the substitutions run by movement rather than by machine. Pick the
+highest-ranked option the athlete's tier (§10) actually supports.
+
+| Full-gym exercise | `barbell-home` | `dumbbell-home` |
+|---|---|---|
+| **Lat pulldown** | Pull-up · band-assisted pull-up · barbell row (higher volume) | Pull-up · single-arm dumbbell row, +1 set · dumbbell pullover |
+| **Seated cable row** | Pendlay row · chest-supported barbell row on an incline bench | Chest-supported dumbbell row · single-arm row |
+| **Cable lateral raise** | **No good option.** Barbell upright row, light and high-rep, only if pain-free — otherwise state the gap | Dumbbell lateral raise · leaning cable-style raise holding a rack upright |
+| **Reverse pec deck / cable rear delt fly** | Bent-over barbell high row · band pull-apart | **Chest-supported reverse fly on a 30° bench — better than the machine it replaces** |
+| **Cable / machine chest press** | Barbell bench · incline bench | Dumbbell bench · incline dumbbell press · dumbbell fly |
+| **Pec deck / cable crossover** | Barbell floor press with a slow eccentric · band fly | Dumbbell fly, flat or slightly inclined |
+| **Leg press / hack squat** | Back squat · front squat · Bulgarian split squat | Goblet squat · Bulgarian split squat · heavy step-up |
+| **Seated / lying leg curl** | Romanian deadlift · Nordic curl (assisted) · good morning | Dumbbell RDL · Nordic curl · slider leg curl |
+| **Hip abduction machine** | Band-resisted lateral walk · barbell hip thrust | Band lateral walk · dumbbell hip thrust |
+| **Standing / seated calf raise** | Barbell calf raise, toes on a plate | Single-leg dumbbell calf raise on a step, 2 s pause |
+| **Cable shrug** | Barbell shrug · trap-bar shrug | Dumbbell shrug, pause at the top |
+| **Overhead cable extension** | Barbell skull crusher · close-grip bench | Dumbbell overhead extension · skull crusher |
+| **Machine pullover / straight-arm pulldown** | Barbell pullover on a bench | Dumbbell pullover |
+| **Cable curl** | Barbell curl · EZ curl | Incline dumbbell curl · hammer curl |
+
+**Two rows deserve to be read carefully.** The dumbbell reverse fly is genuinely better
+than the machine it replaces — say so, it is a rare piece of good news for a home
+setup. And `barbell-home` has **no real side-delt option**, which is the single largest
+gap in that tier; do not pretend an upright row closes it (§10.1).
+
 ---
 
 ## 8. "I can't feel it" table
@@ -265,3 +293,99 @@ is being given up, so nobody is surprised by the trade.
 **A constraint never means the muscle goes untrained.** It means the volume moves. If
 you cannot find a substitution that preserves it, say so explicitly in the block's
 deliberate-omissions section, with the count.
+
+---
+
+## 10. Equipment tiers
+
+Everything above this section assumes a commercial gym. Most people do not have one.
+`config.equipmentTier` says which of five kits the athlete actually trains with, and
+**exercise selection is restricted to that tier.**
+
+| Tier | Assumption |
+|---|---|
+| `full-gym` | Commercial gym: racks, cables, selectorised machines, full dumbbell range |
+| `barbell-home` | Barbell, plates, rack, bench, maybe a pull-up bar. No cables, no machines |
+| `dumbbell-home` | Adjustable dumbbells, a bench, bands. No barbell |
+| `minimal` | Bands and a pull-up bar |
+| `bodyweight` | Nothing but the floor |
+
+> **State the gap. Do not paper over it.**
+>
+> A bodyweight tier does not train lateral delts well. Saying it does, and prescribing
+> a lateral raise with a water bottle, is how someone spends four months on a muscle
+> that never received a stimulus. **Say what the tier can and cannot reach, and let the
+> athlete decide** whether to accept it or buy one piece of equipment.
+
+### 10.1 Coverage by tier — best available option, and the honest gap
+
+| Muscle / pattern | `barbell-home` | `dumbbell-home` | `minimal` | `bodyweight` |
+|---|---|---|---|---|
+| **Quads** | Back / front squat — full coverage | Goblet squat · Bulgarian split squat — good, caps out at dumbbell weight | Band-resisted split squat · sissy squat — **moderate gap**, loading is the limit | Bulgarian split squat · sissy squat · slow-tempo split squat — **moderate gap** |
+| **Hamstrings** | Romanian deadlift · good morning — full | Dumbbell RDL · single-leg RDL — good | Nordic curl (assisted) · band leg curl · slider curl — surprisingly good | Nordic curl · slider / towel leg curl — good, and under-used |
+| **Glutes** | Barbell hip thrust · squat · RDL — full | Dumbbell hip thrust · split squat · step-up — good | Band hip thrust · single-leg glute bridge — good | Single-leg glute bridge · step-up · walking lunge — good |
+| **Calves** | Standing barbell calf raise — full | Dumbbell single-leg calf raise on a step — good | Single-leg raise on a step — good | Single-leg raise on a step, high reps + pause — good |
+| **Chest** | Bench · incline bench — full | Dumbbell bench · incline · fly — full | Band press · push-up variations — moderate | Push-up · deficit push-up · ring/feet-elevated push-up — good up to a point, then **the gap is load** |
+| **Lats** | Pull-up (if a bar) · barbell row — full. **No bar = large gap** | Single-arm row · pullover — good. Pull-up bar closes it entirely | Pull-up · band pulldown — good | Pull-up if a bar exists; **without one, a large gap.** Inverted row under a table is the only real answer |
+| **Mid-back / rhomboids** | Barbell row · Pendlay row — full | Chest-supported dumbbell row · single-arm row — full | Band row · inverted row — good | Inverted row — good |
+| **Rear delts** | Barbell high row · bent-over raise — moderate | Chest-supported reverse fly — **full. Dumbbells are the best tool for this muscle** | Band pull-apart · band face pull — good | Prone reverse fly on the floor · reverse snow angel — **moderate gap.** Honest: this is the weakest slot in the tier |
+| **Side delts** | Barbell upright row only — **large gap** | Dumbbell lateral raise · Y-raise — **full** | Band lateral raise — good | **Large gap.** No bodyweight movement loads abduction meaningfully. Say so |
+| **Front delts / vertical push** | Overhead press — full | Dumbbell shoulder press · Arnold — full | Band overhead press · pike push-up — moderate | Pike push-up · handstand progression — good |
+| **Biceps** | Barbell curl — full | Incline / hammer / preacher curl — full | Band curl · chin-up — good | Chin-up · inverted curl — moderate |
+| **Triceps** | Close-grip bench · skull crusher — full | Overhead extension · skull crusher · close-grip press — full | Band pushdown · overhead extension — good | Diamond push-up · bench dip · ring extension — good |
+| **Core** | Loaded carries · ab wheel | Suitcase carry · dead bug with load | Pallof press with a band — **excellent** | Dead bug · plank · hollow hold — full |
+| **Carry** | Farmer carry with plates — full | Farmer / suitcase carry — full | **Gap.** Substitute a loaded static hold | **Gap.** Substitute a plank or hollow hold and say the pattern is unmet |
+
+**Where a tier says "large gap", the honest sentence is:**
+
+> Your kit can't train side delts well. Bands or a pair of light dumbbells fix it for
+> about the price of one gym month, and nothing you already own is a substitute. Until
+> then I'm programming what your setup does reach, and side delts stay at maintenance —
+> which I'll say in the volume table rather than hiding it.
+
+### 10.2 The two lowest tiers — progression is not a weight
+
+In `minimal` and `bodyweight`, there is usually no load to add. **Progression moves to
+four other variables, in this order:**
+
+| # | Variable | What it looks like |
+|---|---|---|
+| 1 | **Reps** | 3×8 → 3×9 → 3×10 → 3×12, then move to the next variable |
+| 2 | **Tempo** | 2-0-1 → 3-0-1 → 3-1-1. A slower eccentric and a pause at the hardest point |
+| 3 | **Leverage** | Push-up → feet-elevated → deficit → archer → one-arm progression. Squat → split squat → Bulgarian → pistol progression |
+| 4 | **Unilateral** | Two limbs → one limb, with the other assisting less each step |
+
+> **Double progression applies to these variables exactly as it applies to a weight**
+> (`programming.md` §4). Hit the top of the rep range on all sets → advance **one**
+> variable by the smallest step → rebuild the reps. Never advance two at once; you
+> learn nothing from either.
+
+**`today` prints the progression variable in the column where a weight would go.**
+
+```
+3. Push-Up (feet elevated)   3×12   +1 rep    60s   last: 3×11 (Sep 2)  ↑
+4. Pike Push-Up              3×8    3-0-1     90s   last: 3×8 @ 2-0-1 (Sep 2)  ↑ tempo
+5. Bulgarian Split Squat     3×10   L/R even  90s   last: 3×10 (Sep 2)
+```
+
+**Never an empty column.** A blank where a number should be is the fastest way to make
+someone stop trusting the sheet.
+
+**Bands are a special case.** Band tension is not linear and is not comparable between
+brands. Record the band by **colour and brand as the athlete names it** — `red Rogue
+band`, not `~15 kg` — and progress by band, by reps, or by shortening the anchor
+distance. **Never convert a band to a kilogram figure.** It is a fabricated number
+dressed as a measurement.
+
+### 10.3 What each tier means for the volume gate
+
+The publication gate does not soften because the kit is small. **What changes is which
+exercises are available to satisfy it, and what goes in deliberate omissions.**
+
+- If a priority muscle cannot reach the mode's target in the athlete's tier, that is a
+  **gate failure with an equipment cause**. Say so in those words, put the trade-off to
+  the athlete (`skills/block` step 5), and name the one piece of kit that would fix it.
+- **Never satisfy the gate with an exercise the tier cannot perform**, and never count
+  a movement that does not actually load the muscle. A volume table that reaches 10
+  sets by counting three exercises that miss the target is worse than a table that
+  honestly reads 4.

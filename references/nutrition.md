@@ -45,6 +45,12 @@ Maintenance = BMR x activity factor (1.45 - 1.65)
 **Flag this as an estimate, every time you print it.** Individual variation around
 the formula is large enough that the number is a starting point and nothing more.
 
+> **On the two branches.** Mifflin-St Jeor was derived with a binary sex term and there
+> is no third equation. For anyone that binary does not describe, **either equation is a
+> usable starting estimate** — the two differ by 166 kcal at the BMR step, which is
+> smaller than the individual variation around the formula itself, and the scale
+> corrects it within three weeks either way. Pick one, say which you used, and move on.
+
 > ### The scale beats the calculator. Always.
 >
 > Set an initial estimate, then adjust off the **3-week rolling average** of
@@ -56,10 +62,23 @@ swing 1-2 kg on water, sodium, and gut content, and a single reading means nothi
 
 ---
 
-## 3. Rate of gain
+## 3. The three stances
 
-**0.2-0.25% of bodyweight per week** while gaining. Faster increases the fat share
-of the gain without increasing the muscle share.
+**The active goal profile's `nutrition_stance` selects one.** Nothing else does.
+
+| Stance | Modes | Direction |
+|---|---|---|
+| **Surplus** | `hypertrophy` | Maintenance + ~10%, targeting a rate of gain |
+| **Deficit** | `fat-loss` | Maintenance − a deficit, targeting a rate of loss |
+| **Maintenance** | `strength` · `endurance-hybrid` · `general-fitness` | Hold weight, protect protein |
+
+The protein floor (§1) and the hard floors (§8) are **the same in all three, and in all
+five modes** (`safety.md` §8).
+
+### 3.1 Surplus — `hypertrophy`
+
+**Rate: 0.2-0.25% of bodyweight per week.** Faster increases the fat share of the gain
+without increasing the muscle share.
 
 | Bodyweight | Target weekly gain |
 |---|---|
@@ -71,21 +90,68 @@ of the gain without increasing the muscle share.
 That is small enough to be invisible on any single day, which is exactly why the
 3-week average is the only measurement that works.
 
+### 3.2 Deficit — `fat-loss`
+
+**Rate: 0.5-0.75% of bodyweight per week. Hard ceiling 1%** (§8, and it is a floor of
+the system, not a preference).
+
+| Bodyweight | Target weekly loss | Do not exceed |
+|---|---|---|
+| 60 kg | 300-450 g | 600 g |
+| 70 kg | 350-525 g | 700 g |
+| 80 kg | 400-600 g | 800 g |
+| 90 kg | 450-675 g | 900 g |
+| 100 kg | 500-750 g | 1000 g |
+
+Three things are load-bearing in this stance, and they are the ones people get wrong:
+
+- **Protein goes up in priority, not down.** 1.6 g/kg is the floor in every stance, and
+  in a deficit it is the number to protect before calories.
+- **Training volume does not come down.** The deficit removes the fat; the training
+  decides whether what is lost is fat or muscle (`goals/fat-loss.md` §3).
+- **Cardio, if any, is a daily step target — not sessions.** Easier to hold, does not
+  compete with lifting recovery, and never framed as compensation for food.
+
+**Schedule a maintenance-calorie diet break every 8-12 weeks**, with a date, at the
+start of the block rather than when someone feels they need one.
+
+### 3.3 Maintenance — `strength`, `endurance-hybrid`, `general-fitness`
+
+**Hold the 3-week average flat, within roughly ±0.3% BW/week.**
+
+- **`strength`:** maintenance to a slight surplus. **Never a deficit while chasing a
+  heavy PR** — say so once, plainly, and offer `fat-loss` mode instead if that is what
+  they want.
+- **`endurance-hybrid`:** maintenance to a slight surplus. Protein ≥1.6 g/kg.
+  Carbohydrate is performance-relevant around key sessions — flag that once, as a fact,
+  and **do not prescribe a timing protocol**.
+- **`general-fitness`:** the protein floor, and nothing else. **Do not volunteer a
+  calorie target** — not at setup, not at a check-in. If they ask, set maintenance and
+  answer the question they asked.
+
 ---
 
 ## 4. Adjustment rule
 
-Run this at every `checkin`. It is the whole nutrition loop.
+Run this at every `checkin`. It is the whole nutrition loop, and it branches on the
+stance.
 
-| 3-week average says | Do |
-|---|---|
-| Flat or falling, and the goal is to gain | **+300 kcal/day** |
-| Rising faster than 0.35% BW/week | **-200 kcal/day** |
-| Inside the 0.2-0.25%/week band | **Nothing.** Say so. |
-| Fewer than 3 weeks of data | **Nothing.** Say you need another week. |
+| Stance | 3-week average says | Do |
+|---|---|---|
+| **Surplus** | Flat or falling | **+300 kcal/day** |
+| | Rising faster than 0.35% BW/week | **-200 kcal/day** |
+| | Inside 0.2-0.25%/week | **Nothing.** Say so |
+| **Deficit** | Flat or rising | **-200 kcal/day** |
+| | Falling faster than 1% BW/week | **+200 kcal/day.** Not a suggestion — this is the §8 floor being enforced |
+| | Inside 0.5-0.75%/week | **Nothing.** Say so |
+| **Maintenance** | Drifting more than 0.3% BW/week either way | **±200 kcal/day** |
+| | Stable | **Nothing.** Say so |
+| **Any** | Fewer than 3 weeks of data | **Nothing.** Say you need another week |
 
 One adjustment per check-in. Two changes at once means you learn nothing from
 either.
+
+**In `general-fitness` mode, run none of this unless asked.**
 
 ---
 
@@ -94,12 +160,23 @@ either.
 Most people will not take tape measurements, and asking them to is how you lose them.
 Three signals they already have:
 
+**In a surplus:**
+
 | Weight | Strength | Waistband | Verdict |
 |---|---|---|---|
 | up | up | same | **Muscle.** Continue |
 | up | up | slightly up | **Mostly muscle.** Normal. Hold |
 | up | flat | up | **Fat.** Cut ~200 kcal |
 | flat | up | same | **Recomp.** Add calories to speed it up |
+
+**In a deficit** — the same three signals, read the other way round:
+
+| Weight | Strength | Waistband | Verdict |
+|---|---|---|---|
+| down | held | looser | **Exactly right.** Continue, and say so — held strength in a deficit is a success, not a stall |
+| down | falling | looser | **Too fast, or protein too low.** Check the rate first, then protein |
+| flat | held | looser | **Recomp.** Working. Do not add a deeper deficit to chase the scale |
+| down | held | same | **Wait.** Waistband lags the scale. Two more weeks before changing anything |
 
 "Waistband" means a specific pair of trousers, checked at the same time of day, and
 recorded as **Looser / Same / Tighter** in the Body Metrics database. It is a free,
@@ -143,11 +220,16 @@ or say there is not one, and leave the decision with them.
 ## 8. Hard floors — refuse, do not negotiate
 
 These are enforced, not documented. No skill may compute a target that violates them,
-and no user instruction unlocks them.
+and no user instruction unlocks them. **They are identical in all five goal modes**
+(`safety.md` §8).
 
 - **Never set calories below `BMR x 1.2`.**
 - **Never target a BMI below 18.5.**
 - **Never recommend losing more than 1% of bodyweight per week.**
+
+**In `fat-loss` mode these are the primary publication gate, not a footnote** — a block
+whose nutrition targets breach them does not ship, at any training volume
+(`goals/fat-loss.md` §4).
 
 ### What refusal looks like
 
