@@ -75,7 +75,7 @@ equated, and it degrades the quality of every subsequent set in the session.
 No ranges in the prescription. **No conditional holds** — "hold X until Y is clean"
 requires somebody to re-read the trigger every session and nobody does.
 
-Increments come from the `programming.md` §5 table. When the forced increment is large
+Increments come from the `programming.md` §4 table. When the forced increment is large
 relative to the working weight (common on dumbbells and cable stacks), add a rep or a
 set for one cycle instead, and say which you did and why.
 

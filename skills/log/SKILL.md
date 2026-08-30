@@ -17,6 +17,11 @@ Load `${CLAUDE_PLUGIN_ROOT}/references/safety.md`,
 Notion check (`notion-fetch` with `id: "self"`) → read config → if either fails, print the `storage-notion.md` §1 message
 or point at `/gym-coach:setup`, and stop.
 
+**Read `config.goalMode` and load `${CLAUDE_PLUGIN_ROOT}/references/goals/<mode>.md`.**
+No `goalMode` means `hypertrophy` — read it that way, silently. `log` writes, so it is
+one of the skills that **rewrites a version-1 config as version 2** while it is there
+(`storage-notion.md` §2.1). Do not announce it.
+
 Then read the **active block** and the **last log entry for this rotation day**. Nothing
 else.
 
@@ -161,26 +166,94 @@ If a bodyweight was reported, also write a **Body Metrics** row
 Against the last session of the **same rotation day**:
 
 ```
-Progressed:  lat pulldown 85 → 90 lb · seated row 85 → 95 lb
-Stalled:     cable shrug — 100 lb × 3×12, third session at this weight
+Progressed:  lat pulldown 39 → 41 kg · seated row 41 → 43 kg
+Stalled:     cable shrug — 45 kg × 3×12, third session at this weight
 Skipped:     prone Y-raise — time (not equipment)
 ```
 
 Name the lifts and the numbers. Not "good progress overall".
 
+### `fat-loss` mode — a held load is `retained`, not `stalled`
+
+**One word, and it decides whether people keep logging.**
+
+While the 3-week bodyweight average is falling on schedule, a lift at the same weight
+and reps is **retained**. Only a *falling* load counts against the plan
+(`goals/fat-loss.md` §7).
+
+```
+Progressed:  lat pulldown 39 → 41 kg
+Retained:    seated row 43 kg · cable shrug 45 kg · chest-supported row 32 kg
+             Weight is down 0.6%/week — holding these is the job, and you're doing it.
+Declining:   none
+Skipped:     none
+```
+
+Check the body metrics before choosing the word. If the 3-week average is **not** falling
+on schedule, a held load is a held load and the ordinary stall language applies — say
+which of the two situations you are in.
+
+### `strength` mode — record the top set and compute e1RM
+
+- **Record the top set separately** from the back-off sets: its weight, its reps, and
+  the reported RPE if given.
+- **Compute e1RM from the top set with Epley** — `e1RM = weight × (1 + reps/30)` — and
+  **write it into the log body** so `checkin` reads it rather than recomputing from
+  scratch.
+- Name it as an estimate and a trend, once, not as a max.
+
+```
+| Exercise | Sets | Reps | Weight | Notes |
+|---|---|---|---|---|
+| Back Squat | 4 | 4 | 102.5 kg | top set 102.5 kg × 4 @RPE 8 · e1RM 116 kg (Epley) |
+```
+
+**Two consecutive missed sessions on a main lift at the same load** triggers the
+profile's ~10% reset. Say so, write it into the block's `Adjustments`, and do not
+present it as a failure — it is the scheme working.
+
+### `endurance-hybrid` mode — log an endurance session as context
+
+Accept and record an endurance session the athlete reports. It is **context, not a
+prescription**, and this coach does not write their endurance program
+(`goals/endurance-hybrid.md`).
+
+- `Session Type = Endurance`. If the database predates v0.2.0 and lacks the option,
+  **add the option** — do not fail, do not silently write `Other`
+  (`storage-notion.md` §4).
+- Capture **duration** and a **subjective label** in the athlete's own words — easy /
+  steady / hard / long / intervals / race. Do not translate it into a zone or a pace.
+- Title it `YYYY-MM-DD — Endurance NAME`, e.g. `2026-09-04 — Endurance Long Run`.
+- **It does not advance the lifting rotation.** Say so in one line so nobody expects
+  Day 3 next.
+
+```
+Logged — Endurance, 68 min, "long, easy". Context only; the rotation is unchanged,
+so your next lifting session is still Day 2.
+```
+
 ---
 
-## 9. Apply the stall rule
+## 9. Apply the profile's stall rule
 
-Anything at the **same weight and same reps for 3 sessions** triggers
-`programming.md` §6, in order: **move it earlier** → **add a set** → **change the
-variation**.
+**The trigger and the intervention list come from the active profile's `stall_rule`.**
+
+| Mode | Trigger | First intervention |
+|---|---|---|
+| `hypertrophy` | Same weight *and* reps, 3 sessions | Move it earlier |
+| `strength` | Main lift: 2 consecutive missed sessions | ~10% reset and rebuild |
+| `fat-loss` | 3 sessions of **declining** load | Check the rate of loss — the deficit, not the plan |
+| `general-fitness` | Same weight *and* reps, 4 sessions | Change the variation |
+| `endurance-hybrid` | Declining load while endurance volume is **flat** | Move it earlier |
+
+Then the rest of that profile's ordered list.
 
 Say which intervention you applied and why. Write it into the block's `Adjustments` or
 the operating manual so it survives the chat.
 
-**Never just re-prescribe it.** First check it is a real stall and not a logging gap, a
-safety-capped lift, or a lift whose smallest increment is a 12% jump.
+**Never just re-prescribe it unchanged.** First check it is a real stall and not a
+logging gap, a safety-capped lift, or a lift whose smallest increment is a 12% jump
+(`programming.md` §5).
 
 ---
 
@@ -188,7 +261,7 @@ safety-capped lift, or a lift whose smallest increment is a 12% jump.
 
 Exactly one, for the next time this rotation day comes around. Specific and small:
 
-> **Next Day 2:** 3×12 clean on the cable shrug at 100 lb — it's moved to slot 4.
+> **Next Day 2:** 3×12 clean on the cable shrug at 45 kg — it's moved to slot 4.
 
 Then stop. Do not summarise the block, do not recompute volume, do not offer a redesign.
 That is `checkin` and `block`.
@@ -201,4 +274,6 @@ That is `checkin` and `block`.
 - Never treat a reported effort score as something to verify.
 - Never conflate skip reasons.
 - Never guess a screenshot field.
+- **Use the active mode's vocabulary.** `retained` and `stalled` are not
+  interchangeable, and neither is `held through a build block`.
 - Write once, to Notion, and confirm what was written in one line.
