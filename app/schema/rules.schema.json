@@ -40,7 +40,10 @@
         "partials_count"
       ],
       "properties": {
-        "scheme": { "enum": ["double", "linear"] },
+        "scheme": {
+          "description": "Only double progression is implemented: clear the top of the rep range on every working set, then add one increment and drop to the bottom. Pinned so a rules edit cannot ask the engine for a scheme it does not have.",
+          "const": "double"
+        },
         "increments": {
           "description": "Smallest load step by equipment, in increment_unit. Keys are equipment names, so new equipment needs no schema change.",
           "type": "object",
@@ -49,8 +52,8 @@
         },
         "increment_unit": { "enum": ["lb", "kg"] },
         "most_recent_entry_decides": {
-          "description": "true: the last logged exposure sets the next target, not the best one.",
-          "type": "boolean"
+          "description": "The last logged exposure sets the next target, never the best one. Pinned true: lift_state carries the latest exposure, so a best-ever policy has no data to read.",
+          "const": true
         },
         "partials_count": {
           "description": "false: a partial rep never counts toward clearing a rep range.",

@@ -110,6 +110,18 @@ test('a muscle named in min_weekly_sets.by_muscle must be in priority', () => {
   assert.match(validateRules(r).join('\n'), /forearms/);
 });
 
+test('a progression scheme the engine does not implement fails', () => {
+  const r = clone();
+  r.progression.scheme = 'linear';
+  assert.match(validateRules(r).join('\n'), /scheme/);
+});
+
+test('turning off most_recent_entry_decides fails', () => {
+  const r = clone();
+  r.progression.most_recent_entry_decides = false;
+  assert.match(validateRules(r).join('\n'), /most_recent_entry_decides/);
+});
+
 test('an unknown unit fails', () => {
   const r = clone();
   r.units.weight = 'stone';
