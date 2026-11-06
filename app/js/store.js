@@ -56,6 +56,7 @@ export const state = {
   bodyMetrics: [],
   sessionDetail: null,
   blockDetails: {},
+  liftHistory: {},
   pendingWrites: 0,
 };
 
