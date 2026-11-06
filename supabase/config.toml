@@ -1,0 +1,16 @@
+project_id = "gym-coach"
+
+[auth]
+# One account, created by hand in the dashboard. Nobody else signs up.
+enable_signup = false
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = false
+enable_confirmations = false
+
+[db]
+major_version = 17
+
+[functions.dispatch-job]
+verify_jwt = true
