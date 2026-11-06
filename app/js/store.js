@@ -57,6 +57,7 @@ export const state = {
   sessionDetail: null,
   blockDetails: {},
   liftHistory: {},
+  rulesSchema: null,
   pendingWrites: 0,
 };
 
