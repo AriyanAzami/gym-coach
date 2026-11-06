@@ -1,15 +1,19 @@
-# A user's Notion IDs and personal profile must never be committable by accident.
+# Secrets and local configuration
+.env*
 *.local.json
-gym-coach.config.json
-.gym-coach/
-gym-coach-data/
 
-# Personal training data
-*.private.md
-scratch/
-my-*.md
+# Scratch: job working directory, migration output, skill workspace
+work/
+migrate/out/
+.superpowers/
 
-# OS / editor noise
+# Dependencies
+node_modules/
+
+# The build brief is not part of the repo
+gym-coach-build-prompt.md
+
+# OS and editor noise
 .DS_Store
 Thumbs.db
 desktop.ini
@@ -17,9 +21,3 @@ desktop.ini
 .idea/
 *.swp
 *~
-
-# Build spec — not part of the shipped plugin
-BUILD-PLAN-gym-coach-plugin.md
-
-# Rebuild spec — not part of the shipped plugin
-REBUILD-PROMPT.md

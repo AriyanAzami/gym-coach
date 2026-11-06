@@ -1,0 +1,20 @@
+{
+  "name": "gym-coach",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal training app: a PWA over Supabase with block generation in a GitHub Action.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test",
+    "validate:rules": "node coach/validate.mjs --rules"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  }
+}
