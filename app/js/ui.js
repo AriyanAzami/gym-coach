@@ -23,9 +23,11 @@ export function fmtDate(ymd) {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/* Short rests read better in seconds — 60s and 90s are how they are prescribed —
+   and only whole minutes from two minutes up switch to minutes. */
 export function fmtRest(seconds) {
   if (seconds === null || seconds === undefined) return '—';
-  return seconds >= 60 && seconds % 60 === 0 ? `${seconds / 60} min` : `${seconds}s`;
+  return seconds >= 120 && seconds % 60 === 0 ? `${seconds / 60} min` : `${seconds}s`;
 }
 
 /* The smallest markdown subset the coach's rationale and check-ins need.
