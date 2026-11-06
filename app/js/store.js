@@ -54,6 +54,7 @@ export const state = {
   notes: [],
   decisions: [],
   bodyMetrics: [],
+  sessionDetail: null,
   pendingWrites: 0,
 };
 
@@ -189,6 +190,21 @@ export async function loadSession(sessionId) {
       .in('session_exercise_id', exercises.map((e) => e.id)).order('set_no').then(rows)
     : [];
   return { exercises, sets };
+}
+
+/* The open session, with its frozen targets and whatever has been logged so far.
+   Held on state so the Workout screen can be rendered from stubbed data. */
+export async function loadSessionDetail(sessionId) {
+  const session = state.sessions.find((s) => s.id === sessionId)
+    ?? await client().from('sessions').select('*').eq('id', sessionId).maybeSingle()
+      .then((r) => (r.error ? null : r.data));
+  if (!session) {
+    state.sessionDetail = null;
+    return null;
+  }
+  const { exercises, sets } = await loadSession(sessionId);
+  state.sessionDetail = { session, exercises, sets };
+  return state.sessionDetail;
 }
 
 export const liftHistoryFor = (exerciseId) => client().from('lift_history').select('*')
