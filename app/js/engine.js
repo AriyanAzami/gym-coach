@@ -180,3 +180,52 @@ export function nextTarget({ slot, exercise, state, similar, rules }) {
     },
   };
 }
+
+/* The whole card for one day: one exact target per slot, flags first. Takes the
+   raw rows the app already has in memory, so the screen does no maths. */
+export function planForDay({ day, slots, exercises, states, rules }) {
+  if (!day) {
+    return { dayName: null, warmupNote: null, flags: [], exercises: [], reason: 'no day to plan' };
+  }
+
+  const byId = new Map((exercises ?? []).map((e) => [e.id, e]));
+  const stateById = new Map((states ?? []).map((s) => [s.exercise_id, s]));
+  const mine = (slots ?? [])
+    .filter((s) => s.day_id === day.id)
+    .sort((a, b) => a.position - b.position);
+
+  const entries = [];
+  const unknown = [];
+  for (const slot of mine) {
+    const exercise = byId.get(slot.exercise_id);
+    if (!exercise) {
+      unknown.push(slot.exercise_id);
+      continue;
+    }
+    entries.push(nextTarget({
+      slot,
+      exercise,
+      state: stateById.get(exercise.id) ?? null,
+      similar: states ?? [],
+      rules,
+    }));
+  }
+
+  const flags = entries
+    .filter((e) => e.flag)
+    .map((e) => ({ exercise: e.name, flag: e.flag }));
+
+  let reason = null;
+  if (mine.length === 0) reason = 'this day has no exercises yet';
+  else if (unknown.length > 0) reason = `${unknown.length} slot(s) point at an unknown exercise`;
+
+  return {
+    dayId: day.id,
+    dayIndex: day.day_index ?? null,
+    dayName: day.name ?? null,
+    warmupNote: day.warmup_note ?? null,
+    flags,
+    exercises: entries,
+    reason,
+  };
+}
