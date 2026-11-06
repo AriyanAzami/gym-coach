@@ -55,6 +55,7 @@ export const state = {
   decisions: [],
   bodyMetrics: [],
   sessionDetail: null,
+  blockDetails: {},
   pendingWrites: 0,
 };
 

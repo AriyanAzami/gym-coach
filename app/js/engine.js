@@ -303,3 +303,50 @@ export function projectWeeklySets(setsPerSession, perWeekRate) {
   if (!(perWeekRate > 0)) return null;
   return Math.round(setsPerSession * perWeekRate * 100) / 100;
 }
+
+/* What a block would produce per muscle per week, judged at the rate actually
+   trained rather than the rate intended. The rotation cycles through the block's
+   days, so a cycle's sets spread over however many sessions a week happen.
+
+   With no observed rate yet — a first block — one full cycle a week is assumed,
+   which is the most optimistic reading and so never hides a shortfall.
+
+   Shared with coach/validate.mjs: the volume gate and the draft's volume table
+   must agree, so they are the same function. */
+export function plannedWeeklyVolume({ days, slots, exercises, rules, perWeekRate }) {
+  const min = rules?.volume?.min_weekly_sets;
+  const priority = rules?.priority;
+  if (!min || !Array.isArray(priority)) return [];
+
+  const dayCount = (days ?? []).length;
+  if (dayCount === 0) return [];
+
+  const byId = new Map((exercises ?? []).map((e) => [e.id, e]));
+  const factor = rules.volume.indirect_factor ?? 0;
+  const perCycle = new Map();
+  const add = (muscle, n) => {
+    if (!muscle) return;
+    perCycle.set(muscle, (perCycle.get(muscle) ?? 0) + n);
+  };
+
+  for (const slot of slots ?? []) {
+    // A draft plan carries new exercises inline, before they exist as rows.
+    const exercise = byId.get(slot.exercise_id) ?? slot.exercise ?? null;
+    if (!exercise) continue;
+    const sets = Number(slot.sets) || 0;
+    add(exercise.primary_muscle, sets);
+    for (const secondary of exercise.secondary_muscles ?? []) {
+      add(secondary, sets * factor);
+    }
+  }
+
+  const rate = perWeekRate > 0 ? perWeekRate : dayCount;
+  const scale = rate / dayCount;
+  const extra = [...perCycle.keys()].filter((m) => !priority.includes(m)).sort();
+
+  return [...priority, ...extra].map((muscle) => {
+    const sets = Math.round((perCycle.get(muscle) ?? 0) * scale * 100) / 100;
+    const target = min.by_muscle?.[muscle] ?? min.default;
+    return { muscle, sets, target, shortBy: Math.max(0, Math.round((target - sets) * 100) / 100) };
+  });
+}
