@@ -1,0 +1,46 @@
+name: pages
+
+# The app is static: no build step, so the app/ directory is what ships.
+# This workflow needs no secrets — the Supabase URL and anon key in
+# app/js/config.js are public identifiers and access is enforced by RLS.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail if the app still points at the placeholder project
+        run: |
+          if grep -q 'PROJECT_REF' app/js/config.js; then
+            echo "app/js/config.js still holds the placeholder Supabase project."
+            exit 1
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app
+      - id: deploy
+        uses: actions/deploy-pages@v4
