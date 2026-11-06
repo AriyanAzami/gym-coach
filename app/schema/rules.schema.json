@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AriyanAzami/gym-coach/coach/schema/rules.schema.json",
+  "title": "Coaching rules",
+  "description": "Every coaching number the app and the coach obey. Code reads this document; it never hardcodes a value from it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "units",
+    "progression",
+    "stall",
+    "session",
+    "volume",
+    "priority",
+    "constraints",
+    "rotation",
+    "deload",
+    "warmup",
+    "nutrition",
+    "opener"
+  ],
+  "properties": {
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["weight", "body"],
+      "properties": {
+        "weight": { "enum": ["lb", "kg"] },
+        "body": { "enum": ["lb", "kg"] }
+      }
+    },
+    "progression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scheme",
+        "increments",
+        "increment_unit",
+        "most_recent_entry_decides",
+        "partials_count"
+      ],
+      "properties": {
+        "scheme": { "enum": ["double", "linear"] },
+        "increments": {
+          "description": "Smallest load step by equipment, in increment_unit. Keys are equipment names, so new equipment needs no schema change.",
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 }
+        },
+        "increment_unit": { "enum": ["lb", "kg"] },
+        "most_recent_entry_decides": {
+          "description": "true: the last logged exposure sets the next target, not the best one.",
+          "type": "boolean"
+        },
+        "partials_count": {
+          "description": "false: a partial rep never counts toward clearing a rep range.",
+          "type": "boolean"
+        }
+      }
+    },
+    "stall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sessions_to_trigger", "interventions"],
+      "properties": {
+        "sessions_to_trigger": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "interventions": {
+          "description": "Applied in order, one per stall, as a label on the target.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_exercises", "rest_s", "supersets"],
+      "properties": {
+        "max_exercises": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "rest_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["compound", "isolation"],
+          "properties": {
+            "compound": { "type": "integer", "minimum": 0, "maximum": 600 },
+            "isolation": { "type": "integer", "minimum": 0, "maximum": 600 }
+          }
+        },
+        "supersets": { "enum": ["none", "isolation_only", "any"] }
+      }
+    },
+    "volume": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_weekly_sets", "indirect_factor", "count_over"],
+      "properties": {
+        "min_weekly_sets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["default", "by_muscle"],
+          "properties": {
+            "default": { "type": "number", "minimum": 0, "maximum": 60 },
+            "by_muscle": {
+              "description": "Overrides the default. Every key must appear in priority.",
+              "type": "object",
+              "additionalProperties": { "type": "number", "minimum": 0, "maximum": 60 }
+            }
+          }
+        },
+        "indirect_factor": { "type": "number", "minimum": 0, "maximum": 1 },
+        "count_over": { "enum": ["calendar_week_at_observed_rate", "calendar_week"] }
+      }
+    },
+    "priority": {
+      "description": "Muscles in priority order, highest first. The only list of muscle names the rules recognise.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["banned_movement_tags", "equipment_unavailable"],
+      "properties": {
+        "banned_movement_tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "equipment_unavailable": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "rotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete_fraction", "gap_flag_days"],
+      "properties": {
+        "complete_fraction": {
+          "description": "Fraction of a day's slots a partial session must log to advance the rotation.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "gap_flag_days": { "type": "integer", "minimum": 1, "maximum": 365 }
+      }
+    },
+    "deload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["triggers", "backstop_weeks", "set_factor"],
+      "properties": {
+        "triggers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stalled_exercises", "effort_above"],
+          "properties": {
+            "stalled_exercises": { "type": "integer", "minimum": 1, "maximum": 50 },
+            "effort_above": { "type": "integer", "minimum": 1, "maximum": 10 }
+          }
+        },
+        "backstop_weeks": { "type": "integer", "minimum": 1, "maximum": 104 },
+        "set_factor": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "warmup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["note", "core_mobility_placement"],
+      "properties": {
+        "note": { "type": "string" },
+        "core_mobility_placement": { "enum": ["warmup", "anywhere", "end"] }
+      }
+    },
+    "nutrition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protein_g_per_kg",
+        "gain_band_kg_per_week",
+        "weigh_in_cadence",
+        "adjustment"
+      ],
+      "properties": {
+        "protein_g_per_kg": { "type": "number", "exclusiveMinimum": 0, "maximum": 5 },
+        "gain_band_kg_per_week": {
+          "description": "Low and high bound, in that order. Negative for a cut.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "type": "number", "minimum": -2, "maximum": 2 }
+        },
+        "weigh_in_cadence": { "enum": ["daily", "weekly", "biweekly"] },
+        "adjustment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["above_band", "below_band"],
+          "properties": {
+            "above_band": { "type": "string", "minLength": 1 },
+            "below_band": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "opener": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "label", "fraction_of_similar"],
+      "properties": {
+        "policy": { "enum": ["conservative", "moderate"] },
+        "label": { "type": "string", "minLength": 1 },
+        "fraction_of_similar": {
+          "description": "Opening load as a fraction of the nearest comparable logged lift.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

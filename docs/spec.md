@@ -234,7 +234,7 @@ not anyone's programme:**
 }
 ```
 
-The schema makes every section and every key above `required`, forbids
+The schema makes all twelve sections and every key above `required`, forbids
 `additionalProperties`, and bounds the numbers (positive increments, fractions
 in `[0,1]`, rep and rest ranges ordered). A rules document that fails the schema
 is never stored and never reaches a job.
