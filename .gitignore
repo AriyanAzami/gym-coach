@@ -7,6 +7,9 @@ work/
 migrate/out/
 .superpowers/
 
+# Supabase CLI scratch: holds the linked project ref and pooler details
+supabase/.temp/
+
 # Dependencies
 node_modules/
 
