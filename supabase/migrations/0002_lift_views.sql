@@ -45,7 +45,7 @@ select
   max(weight) as weight,
   (array_agg(unit order by set_no))[1] as unit,
   array_agg(reps order by set_no) as reps,
-  array_remove(array_agg(case when partial then null else reps end order by set_no), null) as full_reps
+  coalesce(array_agg(reps order by set_no) filter (where not partial), '{}'::int[]) as full_reps
 from lift_history
 group by user_id, exercise_id, session_id, date;
 

@@ -128,6 +128,63 @@ test('the expected views all exist', () => {
   }
 });
 
+function viewBody(name) {
+  const m = sql.match(new RegExp(`create (?:or replace )?view ${name}[\\s\\S]*?;\\n`));
+  assert.ok(m, `view ${name} not found`);
+  return m[0];
+}
+
+test('the derived views all exist', () => {
+  const all = [...sql.matchAll(/create (?:or replace )?view (\w+)/g)].map((m) => m[1]);
+  for (const v of ['weekly_muscle_volume', 'training_rate', 'rotation_next', 'body_trend']) {
+    assert.ok(all.includes(v), `missing view ${v}`);
+  }
+});
+
+test('weekly_muscle_volume takes indirect_factor from the rules document', () => {
+  const body = viewBody('weekly_muscle_volume');
+  assert.match(body, /indirect_factor/);
+  assert.match(body, /current_documents|rules_factor|factor/);
+  assert.match(body, /secondary_muscles/);
+});
+
+test('weekly_muscle_volume groups by calendar week', () => {
+  assert.match(viewBody('weekly_muscle_volume'), /date_trunc\('week'/);
+});
+
+test('rotation_next takes complete_fraction from the rules document', () => {
+  assert.match(viewBody('rotation_next'), /complete_fraction/);
+});
+
+test('rotation_next guards a block with no days', () => {
+  const body = viewBody('rotation_next');
+  assert.match(body, /day_count = 0/, 'no zero-day guard before the modulo');
+  assert.match(body, /block has no days/);
+});
+
+test('rotation_next requires the first slot for a partial session', () => {
+  assert.match(viewBody('rotation_next'), /first_slot_logged/);
+});
+
+test('body_trend compares against three calendar weeks earlier, not three rows', () => {
+  assert.match(viewBody('body_trend'), /week_start - 21/);
+});
+
+test('no view hardcodes a coaching threshold outside a rules fallback', () => {
+  for (const v of ['weekly_muscle_volume', 'rotation_next']) {
+    const body = viewBody(v);
+    // every coaching number must sit inside a coalesce() beside the rules lookup
+    const numbers = [...body.matchAll(/(?<![\w.'])0\.\d+/g)].map((m) => m[0]);
+    for (const n of numbers) {
+      assert.match(
+        body,
+        new RegExp(`coalesce\\([^)]*,\\s*${n.replace('.', '\\.')}\\)`),
+        `${v} uses ${n} outside a coalesce fallback for a rules value`,
+      );
+    }
+  }
+});
+
 test('lift_history counts only logged sets of completed training sessions', () => {
   const m = sql.match(/create (?:or replace )?view lift_history[\s\S]*?;\n/);
   assert.ok(m, 'lift_history not found');

@@ -267,7 +267,7 @@ begin
        where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'ai_jobs'
      )
   then
-    alter publication supabase_realtime add table ai_jobs;
+    execute 'alter publication supabase_realtime add table ai_jobs';
   end if;
 end $$;
 
