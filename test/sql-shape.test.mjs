@@ -113,6 +113,29 @@ test('ai_jobs is published for realtime', () => {
   assert.match(sql, /alter publication supabase_realtime add table ai_jobs/);
 });
 
+test('every view obeys the caller\'s RLS policies', () => {
+  const all = [...sql.matchAll(/create (?:or replace )?view (\w+)/g)].map((m) => m[1]);
+  const invoker = [...sql.matchAll(/create (?:or replace )?view (\w+)\s+with \(security_invoker = true\)/g)]
+    .map((m) => m[1]);
+  assert.ok(all.length > 0, 'no views found');
+  assert.deepEqual(all.sort(), invoker.sort(), 'a view is missing security_invoker = true');
+});
+
+test('the expected views all exist', () => {
+  const all = [...sql.matchAll(/create (?:or replace )?view (\w+)/g)].map((m) => m[1]);
+  for (const v of ['current_documents', 'lift_history', 'lift_exposures', 'lift_state']) {
+    assert.ok(all.includes(v), `missing view ${v}`);
+  }
+});
+
+test('lift_history counts only logged sets of completed training sessions', () => {
+  const m = sql.match(/create (?:or replace )?view lift_history[\s\S]*?;\n/);
+  assert.ok(m, 'lift_history not found');
+  assert.match(m[0], /kind = 'training'/);
+  assert.match(m[0], /status in \('done', ?'partial'\)/);
+  assert.match(m[0], /\bdone\b/);
+});
+
 test('the shots bucket is created private', () => {
   assert.match(sql, /insert into storage\.buckets \(id, name, public\)\s*values \('shots', 'shots', false\)/);
 });
