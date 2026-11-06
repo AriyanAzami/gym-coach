@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Gym Coach</title>
+  <meta name="description" content="Personal training log, plan and progress tracker.">
+  <meta name="theme-color" content="#101214">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Coach">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="root" class="app" aria-live="polite">
+    <div class="auth"><div class="eyebrow">Loading</div></div>
+  </div>
+
+  <nav class="tabbar hidden" id="tabbar" aria-label="Main">
+    <div class="inner">
+      <button class="tab" data-action="go-tab" data-tab="today" aria-label="Today">
+        <svg viewBox="0 0 24 24"><path d="M3 12h3l3-7 4 14 3-7h5"/></svg>Today</button>
+      <button class="tab" data-action="go-tab" data-tab="workout" aria-label="Workout">
+        <svg viewBox="0 0 24 24"><path d="M4 9v6M20 9v6M7 7v10M17 7v10M7 12h10"/></svg>Log</button>
+      <button class="tab" data-action="go-tab" data-tab="block" aria-label="Block">
+        <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/></svg>Block</button>
+      <button class="tab" data-action="go-tab" data-tab="progress" aria-label="Progress">
+        <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M7 15l4-5 3 3 5-7"/></svg>Progress</button>
+      <button class="tab" data-action="go-tab" data-tab="coach" aria-label="Coach">
+        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Coach</button>
+      <button class="tab" data-action="go-tab" data-tab="settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>Settings</button>
+    </div>
+  </nav>
+
+  <div class="timerbar" id="timerbar" role="timer">
+    <div>
+      <div class="time mono" id="timer-time">0:00</div>
+      <div class="lbl" id="timer-label">Rest</div>
+    </div>
+    <div class="row" style="margin-left:auto">
+      <button class="btn sm" id="timer-minus">&minus;30s</button>
+      <button class="btn sm" id="timer-plus">+30s</button>
+      <button class="btn sm" id="timer-skip">Skip</button>
+    </div>
+    <div class="track"><i id="timer-track"></i></div>
+  </div>
+
+  <div class="sheet-root" id="sheet-root">
+    <div class="backdrop" id="sheet-backdrop"></div>
+    <div class="sheet" id="sheet" role="dialog" aria-modal="true">
+      <div class="grab"></div>
+      <div id="sheet-body"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="vendor/supabase.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
