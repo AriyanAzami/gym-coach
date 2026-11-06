@@ -2,13 +2,25 @@
 /* Closes a job out when a step above save.mjs died. Without this a crashed run
    leaves the row saying "running" forever and the app spins.
 
-   It is deliberately incurious: it does not look at work/claude.log or at
-   anything the model wrote, because whatever it reported would have to be
-   printed or stored, and the log may contain training data. The row gets the
-   step that failed, nothing more. */
+   It reads work/claude.log only through the classifier, which matches it
+   against a fixed list of signatures and returns one of a fixed list of
+   phrases. No part of the log itself is ever printed or stored — "the job
+   failed" with no reason is useless when the cause is an expired token, and
+   echoing the log would put training data in a public Action log. */
 
+import { readFileSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { serviceClient, getJob, setJobStatus } from './lib/db.mjs';
+import { classifyFailure } from './lib/classify.mjs';
+
+function reason() {
+  if (!existsSync('work/claude.log')) return 'the run did not reach the coach';
+  try {
+    return classifyFailure(readFileSync('work/claude.log', 'utf8'));
+  } catch {
+    return 'unclassified';
+  }
+}
 
 async function main(jobId) {
   if (!jobId) {
@@ -26,12 +38,14 @@ async function main(jobId) {
       return 0;
     }
 
+    const why = reason();
     await setJobStatus(client, jobId, {
       status: 'failed',
-      error: 'the run did not finish; see the workflow run for which step failed',
+      error: `the run did not finish: ${why}`,
       finished_at: new Date().toISOString(),
     });
-    console.log(`job ${jobId} failed`);
+    // The category is a constant from classify.mjs, never text from the log.
+    console.log(`job ${jobId} failed: ${why}`);
     return 0;
   } catch {
     console.error(`job ${jobId} could not be closed out`);
