@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AriyanAzami/gym-coach/coach/schema/block.schema.json",
+  "title": "A training block",
+  "description": "What the coach writes. A block prescribes exercises, sets, rep ranges and rest. It never prescribes a load: loads are computed from what was last logged, so there is no weight property anywhere in this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "rationale", "days"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "starts_on": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "ends_on": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "rationale": {
+      "description": "Markdown. Must show the volume arithmetic and cite logged numbers.",
+      "type": "string",
+      "minLength": 1
+    },
+    "days": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 14,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["day_index", "name", "slots"],
+        "properties": {
+          "day_index": { "type": "integer", "minimum": 0, "maximum": 13 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 60 },
+          "warmup_note": { "type": ["string", "null"], "maxLength": 500 },
+          "slots": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["position", "exercise", "sets", "rep_min", "rep_max", "rest_s"],
+              "properties": {
+                "position": { "type": "integer", "minimum": 0, "maximum": 19 },
+                "exercise": { "type": "string", "minLength": 1, "maxLength": 80 },
+                "sets": { "type": "integer", "minimum": 1, "maximum": 12 },
+                "rep_min": { "type": "integer", "minimum": 1, "maximum": 100 },
+                "rep_max": { "type": "integer", "minimum": 1, "maximum": 100 },
+                "rest_s": { "type": "integer", "minimum": 0, "maximum": 900 },
+                "non_negotiable": { "type": "boolean" },
+                "cut_order": { "type": ["integer", "null"], "minimum": 1, "maximum": 20 },
+                "notes": { "type": ["string", "null"], "maxLength": 300 },
+                "new": {
+                  "description": "Required when the exercise is not already in the library, and forbidden when it is.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["primary_muscle", "secondary_muscles", "equipment", "movement_tags", "increment", "increment_unit"],
+                  "properties": {
+                    "primary_muscle": { "type": "string", "minLength": 1 },
+                    "secondary_muscles": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+                    "equipment": { "type": "string", "minLength": 1 },
+                    "movement_tags": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+                    "increment": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+                    "increment_unit": { "enum": ["lb", "kg"] },
+                    "load_mode": { "enum": ["total", "per_hand"] },
+                    "cues": { "type": ["string", "null"], "maxLength": 300 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

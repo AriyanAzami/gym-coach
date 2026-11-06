@@ -1,31 +1,71 @@
 {
-  "units": { "weight": "lb", "body": "kg" },
+  "units": {
+    "weight": "lb",
+    "body": "kg"
+  },
   "progression": {
     "scheme": "double",
-    "increments": { "barbell": 5, "dumbbell": 5, "machine": 10, "cable": 5, "bodyweight": 5 },
+    "increments": {
+      "barbell": 5,
+      "dumbbell": 5,
+      "machine": 10,
+      "cable": 5,
+      "bodyweight": 5
+    },
     "increment_unit": "lb",
     "most_recent_entry_decides": true,
     "partials_count": false
   },
   "stall": {
     "sessions_to_trigger": 3,
-    "interventions": ["move_earlier", "lengthen_rest", "add_set", "change_variation"]
+    "interventions": [
+      "move_earlier",
+      "lengthen_rest",
+      "add_set",
+      "change_variation"
+    ]
   },
   "session": {
     "max_exercises": 8,
-    "rest_s": { "compound": 120, "isolation": 60 },
+    "rest_s": {
+      "compound": 120,
+      "isolation": 60
+    },
     "supersets": "isolation_only"
   },
   "volume": {
-    "min_weekly_sets": { "default": 8, "by_muscle": { "chest": 10 } },
+    "min_weekly_sets": {
+      "default": 8,
+      "by_muscle": {
+        "chest": 10,
+        "core": 0
+      }
+    },
     "indirect_factor": 0.5,
-    "count_over": "calendar_week_at_observed_rate"
+    "count_over": "calendar_week_at_observed_rate",
+    "priority_tolerance": 0.25
   },
-  "priority": ["back", "chest", "shoulders", "legs", "arms", "core"],
-  "constraints": { "banned_movement_tags": [], "equipment_unavailable": [] },
-  "rotation": { "complete_fraction": 0.6, "gap_flag_days": 10 },
+  "priority": [
+    "back",
+    "chest",
+    "shoulders",
+    "legs",
+    "arms",
+    "core"
+  ],
+  "constraints": {
+    "banned_movement_tags": [],
+    "equipment_unavailable": []
+  },
+  "rotation": {
+    "complete_fraction": 0.6,
+    "gap_flag_days": 10
+  },
   "deload": {
-    "triggers": { "stalled_exercises": 3, "effort_above": 9 },
+    "triggers": {
+      "stalled_exercises": 3,
+      "effort_above": 9
+    },
     "backstop_weeks": 12,
     "set_factor": 0.5
   },
@@ -35,7 +75,10 @@
   },
   "nutrition": {
     "protein_g_per_kg": 1.6,
-    "gain_band_kg_per_week": [0.1, 0.3],
+    "gain_band_kg_per_week": [
+      0.1,
+      0.3
+    ],
     "weigh_in_cadence": "weekly",
     "adjustment": {
       "above_band": "hold calories for a week and re-check",
