@@ -31,12 +31,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Checks the resolved value, not the source text: config.js names the
+      # placeholder in the `configured` check itself, so a grep matches its own
+      # guard and fails a perfectly good config.
       - name: Fail if the app still points at the placeholder project
         run: |
-          if grep -q 'PROJECT_REF' app/js/config.js; then
-            echo "app/js/config.js still holds the placeholder Supabase project."
-            exit 1
-          fi
+          node --input-type=module -e "
+            import { configured } from './app/js/config.js';
+            if (!configured) {
+              console.error('app/js/config.js still holds the placeholder Supabase project.');
+              process.exit(1);
+            }
+          "
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
