@@ -229,3 +229,77 @@ export function planForDay({ day, slots, exercises, states, rules }) {
     reason,
   };
 }
+
+/* Dates. sessions.date is a Postgres date and the phone has a timezone, so
+   every conversion goes through the local calendar fields. toISOString() would
+   shift a day in either direction depending on the offset. */
+export function ymd(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseYmd(s) {
+  const [y, m, d] = String(s).split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export function addDays(s, n) {
+  const d = parseYmd(s);
+  d.setDate(d.getDate() + n);
+  return ymd(d);
+}
+
+/* Monday of the ISO week, matching date_trunc('week', ...) in the views. */
+export function isoWeekStart(s) {
+  const d = parseYmd(s);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return ymd(d);
+}
+
+/* The next day of a rotation. A block with no days has no next day at all,
+   which is why this returns null rather than dividing by zero. */
+export function nextDayIndex({ lastCompleteIndex, dayCount }) {
+  if (!Number.isInteger(dayCount) || dayCount <= 0) return null;
+  if (lastCompleteIndex === null || lastCompleteIndex === undefined) return 0;
+  return (lastCompleteIndex + 1) % dayCount;
+}
+
+/* Whether a logged session counts as having completed its day, which is what
+   advances the rotation. The day's first slot is required however much else was
+   logged: skipping the opener means the day did not really happen. */
+export function sessionComplete({ slotCount, loggedSlotPositions, rules }) {
+  if (!Number.isInteger(slotCount) || slotCount <= 0) return false;
+  const logged = new Set(loggedSlotPositions ?? []);
+  if (!logged.has(0)) return false;
+  const fraction = rules?.rotation?.complete_fraction ?? 0.6;
+  return logged.size / slotCount >= fraction;
+}
+
+/* Logged weekly sets against the rules minimum, in priority order. Muscles
+   trained but not listed in priority come last, against the default minimum. */
+export function volumeVsTarget({ weeklyVolume, rules }) {
+  const min = rules?.volume?.min_weekly_sets;
+  const priority = rules?.priority;
+  if (!min || !Array.isArray(priority)) return [];
+
+  const logged = new Map();
+  for (const row of weeklyVolume ?? []) {
+    logged.set(row.muscle, Number(row.total_sets) || 0);
+  }
+
+  const extra = [...logged.keys()].filter((m) => !priority.includes(m)).sort();
+  return [...priority, ...extra].map((muscle) => {
+    const sets = logged.get(muscle) ?? 0;
+    const target = min.by_muscle?.[muscle] ?? min.default;
+    return { muscle, sets, target, shortBy: Math.max(0, Math.round((target - sets) * 100) / 100) };
+  });
+}
+
+/* What a plan's per-session sets add up to over a week at the rate actually
+   trained, which is how volume is judged — not at the rate intended. */
+export function projectWeeklySets(setsPerSession, perWeekRate) {
+  if (!(perWeekRate > 0)) return null;
+  return Math.round(setsPerSession * perWeekRate * 100) / 100;
+}
