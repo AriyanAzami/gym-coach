@@ -62,7 +62,31 @@ Workflow logs on a public repository are world-readable.
 - Comments only where the code is not self-explanatory. No section banners, no
   restating what a line does.
 
+## Invariants that are easy to break by accident
+
+- **One rules validator.** `app/js/rules-check.js` has no dependencies and no
+  node built-ins, because the browser and the Action both run it. `ajv` is not
+  in that path: it is the oracle in `test/rules-check.test.mjs`, which runs both
+  over a corpus and fails if they disagree. Adding a schema keyword means adding
+  it to the checker too.
+- **One volume calculation.** `plannedWeeklyVolume` in `app/js/engine.js` is
+  used by both the Block screen's table and `coach/validate.mjs`. If they
+  diverged, the validator could pass a block the screen shows as short.
+- **Chart colours are validated, not chosen.** The `--accent`, `--warn` and
+  `--bad` tokens in `app/css/app.css` passed the dataviz palette validator
+  against both surfaces for lightness band, chroma, colour-vision separation and
+  contrast. Do not nudge them by eye; re-run the validator.
+- **Chart marks are styled by CSS class**, never inline fills, so dark mode is
+  one token swap. `test/charts.test.mjs` fails if an SVG uses a class that has
+  no rule — such a mark renders invisible.
+- **Every `app/js/*.js` file must be in the `sw.js` precache list**, or it 404s
+  only when the phone is offline. There is a test.
+- A CLI entry point compares `import.meta.url` with
+  `pathToFileURL(process.argv[1]).href`. String-building `file://...` silently
+  never matches on Windows, and the script exits 0 having done nothing.
+
 ## Tests
 
-`npm test` runs `node --test test/`. New behaviour gets a test that failed
-first.
+`npm test` runs `node --test`. New behaviour gets a test that failed first.
+Screens are string builders, so they are tested by rendering against a stubbed
+`store.state` — including every empty state and an HTML-escaping case.
