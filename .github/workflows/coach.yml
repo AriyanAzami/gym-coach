@@ -1,0 +1,94 @@
+name: coach
+
+# The only AI step in the system. It runs Claude Code on the owner's own
+# subscription, against a context file built from their database.
+#
+# This repository is public, so its workflow logs are world-readable. Nothing
+# under work/ is ever printed, cat'ed, tee'd or uploaded — not in a normal step
+# and not in a failure step. The scripts print a job id and a status word, and
+# every error travels in the ai_jobs row, which is behind row-level security.
+#
+# Triggers are deliberately narrow: a dispatch from the edge function, or a
+# manual run. There is no pull_request_target, no issue_comment and no schedule,
+# so a fork or an outside contributor can never reach these secrets.
+
+on:
+  repository_dispatch:
+    types: [coach-job]
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: The ai_jobs row to run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coach
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    env:
+      JOB_ID: ${{ github.event.client_payload.job_id || inputs.job_id }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install the Claude Code CLI
+        run: npm i -g @anthropic-ai/claude-code
+
+      - name: Build the context
+        run: node coach/context.mjs "$JOB_ID"
+
+      - name: Choose the prompt for this job kind
+        id: prompt
+        run: |
+          KIND=$(node -e "
+            const c = require('./work/context.json');
+            const kinds = ['block', 'revise_block', 'checkin', 'ask'];
+            const k = c.job && c.job.kind;
+            if (!kinds.includes(k)) { process.exit(1); }
+            process.stdout.write(k);
+          ")
+          echo "kind=$KIND" >> "$GITHUB_OUTPUT"
+
+      # --allowedTools only decides what runs without a prompt; --tools is what
+      # decides which tools the model has at all. Both are needed. -p is
+      # non-interactive, so anything outside the allow rules is refused rather
+      # than waiting for a human who is not there.
+      - name: Run the coach
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          KIND: ${{ steps.prompt.outputs.kind }}
+        run: |
+          claude -p "$(cat "coach/prompts/$KIND.md")" \
+            --model opus \
+            --max-turns 40 \
+            --tools "Read,Write,Edit,Bash" \
+            --allowedTools "Read" "Write" "Edit" "Bash(node coach/validate.mjs:*)" \
+            --disallowedTools "mcp__*" "WebFetch" "WebSearch" \
+            > work/claude.log 2>&1
+
+      - name: Save the result
+        run: node coach/save.mjs "$JOB_ID"
+
+      # The job row is the only place a reason may safely land, so close it out
+      # even when a step above died before save.mjs could.
+      - name: Close the job out on failure
+        if: failure()
+        run: node coach/fail.mjs "$JOB_ID"
