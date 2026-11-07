@@ -13,8 +13,9 @@ supabase/.temp/
 # Dependencies
 node_modules/
 
-# The build brief is not part of the repo
+# The build brief and session handoffs are not part of the repo
 gym-coach-build-prompt.md
+HANDOFF.md
 
 # OS and editor noise
 .DS_Store
