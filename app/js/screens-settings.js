@@ -50,13 +50,13 @@ function aiReviseTool(target, label, placeholder) {
   return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
     <div class="card-title" style="margin-bottom:6px">
       <span class="eyebrow">AI Assistant · Ask Claude to revise ${h(label)}</span>
-      <span class="pill">Sonnet 5 / Opus 4.6</span>
+      <span class="pill">Sonnet 5 / Opus 5.5</span>
     </div>
     <div class="grid2" style="margin-bottom:8px">
       <label style="margin:0">Model
         <select id="ai-${target}-model">
           <option value="sonnet" selected>Claude Sonnet 5 (Fast)</option>
-          <option value="opus">Claude Opus 4.6 (Deep)</option>
+          <option value="opus">Claude Opus 5.5 (Deep)</option>
         </select>
       </label>
       <label style="margin:0">Effort

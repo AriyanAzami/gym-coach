@@ -30,7 +30,7 @@ export function askSheet(defaultModel = 'opus', defaultEffort = 'high') {
     <div class="grid2">
       <label>Claude model
         <select id="ask-model">
-          <option value="opus"${defaultModel === 'opus' ? ' selected' : ''}>Claude Opus 4.6 (Deep)</option>
+          <option value="opus"${defaultModel === 'opus' ? ' selected' : ''}>Claude Opus 5.5 (Deep)</option>
           <option value="sonnet"${defaultModel === 'sonnet' ? ' selected' : ''}>Claude Sonnet 5 (Fast)</option>
         </select>
       </label>
@@ -85,7 +85,7 @@ function askCard() {
     <div class="grid2" style="margin-bottom:10px">
       <label style="margin:0">Model
         <select id="coach-model">
-          <option value="opus" selected>Claude Opus 4.6</option>
+          <option value="opus" selected>Claude Opus 5.5</option>
           <option value="sonnet">Claude Sonnet 5</option>
         </select>
       </label>

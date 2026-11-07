@@ -108,7 +108,7 @@ export function extractJobMeta(job) {
     ? meta.total_tokens
     : ((inputTokens ?? 0) + (outputTokens ?? 0) || (typeof meta.tokens === 'number' ? meta.tokens : null));
   const turns = typeof meta.turns === 'number' ? meta.turns : null;
-  const modelLabel = model === 'sonnet' ? 'Claude Sonnet 5' : 'Claude Opus 4.6';
+  const modelLabel = model === 'sonnet' ? 'Claude Sonnet 5' : 'Claude Opus 5.5';
   const effortLabel = effort ? effort.charAt(0).toUpperCase() + effort.slice(1) : 'High';
 
   return {

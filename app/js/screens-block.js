@@ -95,7 +95,7 @@ function jobsView() {
 function modelPickerHtml(defaultModel = 'opus', defaultEffort = 'high') {
   return `<div class="grid2">
     <label>Brain / Model<select id="job-model">
-      <option value="opus"${defaultModel === 'opus' ? ' selected' : ''}>Claude Opus 4.6 (Deep)</option>
+      <option value="opus"${defaultModel === 'opus' ? ' selected' : ''}>Claude Opus 5.5 (Deep)</option>
       <option value="sonnet"${defaultModel === 'sonnet' ? ' selected' : ''}>Claude Sonnet 5 (Fast)</option>
     </select></label>
     <label>Thinking Effort<select id="job-effort">
