@@ -141,8 +141,9 @@ sequenceDiagram
 There are four kinds of job: `block` (write a new training block),
 `revise_block` (change a draft based on your comment), `checkin` (review the
 recent weeks) and `ask` (answer a question). An `ask` job can also target the
-rules or the manual. It then produces a new, validated version of that
-document, and you can roll it back in Settings.
+rules or the manual. It then saves a new version of that document, and you
+can roll it back in Settings. Rules versions are checked against the schema
+before they are saved.
 
 The steps:
 
@@ -296,8 +297,10 @@ npx supabase functions deploy dispatch-job
 ### 5. Deploy the app
 
 In **Settings → Pages**, set the source to **GitHub Actions**. Every push to
-`main` that touches `app/` deploys it. The Pages workflow refuses to deploy
-while `config.js` still holds the placeholder project ref. Open the Pages URL
+`main` that touches `app/` deploys it. The workflow's config check only
+catches the literal `PROJECT_REF` placeholder. It **won't** catch a
+`config.js` that still points at the original project, so make sure you've
+done step 3. Open the Pages URL
 on your phone and use **Add to Home Screen** to install it.
 
 ### 6. Write your rules
@@ -310,7 +313,7 @@ manual describing your goals, injuries to work around and coaching style.
 
 ### 7. Check it end to end
 
-1. Open **Block** and tap **Generate a block** and describe what you want. Watch the job go
+1. Open **Block** and tap **Generate a block**, then describe what you want. Watch the job go
    from `queued` through `running` to `done`.
 2. Read the draft's rationale and volume table, then press **Activate**.
 3. **Today** now shows day one. Start it and log a set.
