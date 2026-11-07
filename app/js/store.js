@@ -130,7 +130,7 @@ export async function load() {
     client().from('training_rate').select('*').maybeSingle()
       .then((r) => (r.error ? null : r.data)),
     client().from('body_trend').select('*').order('week_start', { ascending: false }).limit(26).then(rows),
-    client().from('sessions').select('*').order('date', { ascending: false }).limit(120).then(rows),
+    client().from('sessions').select('*').order('date', { ascending: false }).limit(365).then(rows),
     client().from('ai_jobs').select('*').order('created_at', { ascending: false }).limit(30).then(rows),
     client().from('coach_notes').select('*').order('created_at', { ascending: false }).limit(60).then(rows),
     client().from('decisions').select('*').order('date', { ascending: false }).limit(40).then(rows),
@@ -220,6 +220,27 @@ export async function loadSessionDetail(sessionId) {
 
 export const liftHistoryFor = (exerciseId) => client().from('lift_history').select('*')
   .eq('exercise_id', exerciseId).order('date').then(rows);
+
+/* Uploads workout screenshot(s) into the private 'shots' bucket under the
+   user's own folder (shots/{user_id}/{session_id}/...) so RLS permits it. */
+export async function uploadSessionShots(sessionId, files) {
+  const userId = state.user?.id;
+  if (!userId || !sessionId || !files?.length) return [];
+  const bucket = client().storage.from('shots');
+  const uploaded = [];
+  for (let i = 0; i < files.length; i += 1) {
+    const file = files[i];
+    const ext = (file.name?.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const path = `${userId}/${sessionId}/watch-${Date.now()}-${i + 1}.${ext}`;
+    const { error } = await bucket.upload(path, file, {
+      upsert: true,
+      contentType: file.type || 'image/jpeg',
+    });
+    if (error) throw error;
+    uploaded.push(path);
+  }
+  return uploaded;
+}
 
 // ---------- writes ----------
 

@@ -58,14 +58,16 @@ jobs:
       - name: Choose the prompt for this job kind
         id: prompt
         run: |
-          KIND=$(node -e "
+          node -e "
+            const fs = require('node:fs');
             const c = require('./work/context.json');
             const kinds = ['block', 'revise_block', 'checkin', 'ask'];
             const k = c.job && c.job.kind;
             if (!kinds.includes(k)) { process.exit(1); }
-            process.stdout.write(k);
-          ")
-          echo "kind=$KIND" >> "$GITHUB_OUTPUT"
+            const m = c.job && c.job.model === 'sonnet' ? 'sonnet' : 'opus';
+            const e = c.job && ['low', 'medium', 'high', 'max'].includes(c.job.effort) ? c.job.effort : 'high';
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'kind=' + k + '\nmodel=' + m + '\neffort=' + e + '\n');
+          "
 
       # --allowedTools only decides what runs without a prompt; --tools is what
       # decides which tools the model has at all. Both are needed. -p is
@@ -74,10 +76,13 @@ jobs:
       - name: Run the coach
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_CODE_EFFORT_LEVEL: ${{ steps.prompt.outputs.effort }}
           KIND: ${{ steps.prompt.outputs.kind }}
+          MODEL: ${{ steps.prompt.outputs.model }}
         run: |
           claude -p "$(cat "coach/prompts/$KIND.md")" \
             --model opus \
+            --model "$MODEL" \
             --max-turns 40 \
             --tools "Read,Write,Edit,Bash" \
             --allowedTools "Read" "Write" "Edit" "Bash(node coach/validate.mjs:*)" \

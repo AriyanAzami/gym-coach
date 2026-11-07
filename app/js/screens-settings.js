@@ -7,11 +7,76 @@
    and that record has to stay readable. */
 
 import * as store from './store.js';
-import { h, markdown, toast, sheet, closeSheet, confirm, el, getTheme, setTheme } from './ui.js';
+import {
+  h, cleanText, markdown, fmtDuration, fmtTokens, extractJobMeta, encodeJobPrompt,
+  toast, sheet, closeSheet, confirm, el, getTheme, setTheme,
+} from './ui.js';
 import { nav } from './nav.js';
 import { validateRulesWith } from './rules-check.js';
 
 const schema = () => store.state.rulesSchema;
+
+function targetJobBanner(target) {
+  const jobs = store.state.jobs
+    .map((j) => ({ job: j, meta: extractJobMeta(j) }))
+    .filter((x) => x.meta.target === target);
+  if (jobs.length === 0) return '';
+  const latest = jobs[0];
+  const { job, meta } = latest;
+  if (job.status === 'queued' || job.status === 'running') {
+    return `<div class="banner warn" style="margin-top:10px">
+      <b>${h(meta.modelLabel)} (${h(meta.effortLabel)} effort) is revising ${h(target)}…</b>
+      <div class="small muted">The updated version will save automatically once validated.</div>
+    </div>`;
+  }
+  if (job.status === 'failed') {
+    return `<div class="banner bad" style="margin-top:10px">
+      <b>AI revision failed:</b> ${h(job.error ?? 'unknown error')}
+    </div>`;
+  }
+  if (job.status === 'done' && meta.body) {
+    return `<details style="margin-top:10px" open>
+      <summary class="small muted">Latest AI revision (${h(meta.modelLabel)}${meta.durationS != null ? ` · ${h(fmtDuration(meta.durationS))}` : ''}${meta.totalTokens != null ? ` · ${h(fmtTokens(meta.totalTokens))} tok` : ''})</summary>
+      <div style="margin-top:8px">${markdown(meta.body)}</div>
+    </details>`;
+  }
+  return '';
+}
+
+function aiReviseTool(target, label, placeholder) {
+  const busy = store.state.jobs.some(
+    (j) => (j.status === 'queued' || j.status === 'running') && extractJobMeta(j).target === target,
+  );
+  return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+    <div class="card-title" style="margin-bottom:6px">
+      <span class="eyebrow">AI Assistant · Ask Claude to revise ${h(label)}</span>
+      <span class="pill">Sonnet 5 / Opus 4.6</span>
+    </div>
+    <div class="grid2" style="margin-bottom:8px">
+      <label style="margin:0">Model
+        <select id="ai-${target}-model">
+          <option value="sonnet" selected>Claude Sonnet 5 (Fast)</option>
+          <option value="opus">Claude Opus 4.6 (Deep)</option>
+        </select>
+      </label>
+      <label style="margin:0">Effort
+        <select id="ai-${target}-effort">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high" selected>High</option>
+          <option value="max">Max</option>
+        </select>
+      </label>
+    </div>
+    <label style="margin-top:0">What should Claude change?
+      <textarea id="ai-${target}-prompt" rows="2" placeholder="${h(placeholder)}"></textarea>
+    </label>
+    <button class="btn full" data-action="ai-revise" data-target="${h(target)}"${busy ? ' disabled' : ''}>
+      ${busy ? 'Revising with Claude…' : `Ask Claude to revise ${h(label)}`}
+    </button>
+    ${targetJobBanner(target)}
+  </div>`;
+}
 
 function rulesCard() {
   const current = store.state.rules;
@@ -25,8 +90,9 @@ function rulesCard() {
     : '';
 
   const history = versions.length > 1
-    ? `<details style="margin-top:10px"><summary class="small muted">Version history</summary>
-        ${versions.map((d) => `<div class="exrow">
+    ? `<details style="margin-top:10px"><summary class="small muted">Version history (${versions.length})</summary>
+        ${versions.map((d, idx) => `<div class="exrow">
+          <span class="ex-num">${idx + 1}</span>
           <div class="grow">
             <div class="name">Version ${d.version}${d.version === version ? ' — current' : ''}</div>
             <div class="sub muted">${h(String(d.created_at ?? '').slice(0, 10))}</div>
@@ -38,28 +104,41 @@ function rulesCard() {
 
   return `<div class="card">
     <div class="card-title">
-      <h3>Rules</h3>
+      <h3>1 · Rules Policy</h3>
       <span class="small muted">${version ? `version ${version}` : 'no rules yet'}</span>
     </div>
     <p class="small muted">Every target, cap and minimum the app and the coach obey.
     ${schema() ? '' : 'The schema has not loaded, so a save will be checked on the server only.'}</p>
     ${current ? '' : '<div class="banner warn">There is no rules document yet. Paste one in and save.</div>'}
-    <label><textarea id="rules-json" rows="16" spellcheck="false" class="mono">${h(body)}</textarea></label>
+    <label><textarea id="rules-json" rows="14" spellcheck="false" class="mono">${h(body)}</textarea></label>
     <div id="rules-errors"></div>
     <button class="btn primary full" data-action="save-rules">Save as a new version</button>
+    ${aiReviseTool('rules', 'Rules', 'e.g. Move chest above back in priority and set chest minimum sets to 10')}
     ${history}
   </div>`;
 }
 
 function manualCard() {
+  const rawManual = store.state.manual ?? '';
+  const hasHtmlTags = /<\/?(b|i|code|strong|em)>/i.test(rawManual);
   return `<div class="card">
     <div class="card-title">
-      <h3>Manual</h3>
+      <h3>2 · Coaching Manual</h3>
       <span class="small muted">${store.state.manualVersion ? `version ${store.state.manualVersion}` : 'none'}</span>
     </div>
     <p class="small muted">Prose the coach treats as binding, alongside the rules.</p>
-    <label><textarea id="manual-md" rows="10" spellcheck="false">${h(store.state.manual ?? '')}</textarea></label>
-    <button class="btn full" data-action="save-manual">Save as a new version</button>
+    ${rawManual ? `<details style="margin-bottom:10px" open>
+      <summary class="small muted">Formatted preview</summary>
+      <div style="margin-top:8px;padding:12px;background:var(--bg2);border-radius:var(--radius-sm);border:1px solid var(--line)">
+        ${markdown(rawManual)}
+      </div>
+    </details>` : ''}
+    <label>Edit Markdown<textarea id="manual-md" rows="10" spellcheck="false">${h(rawManual)}</textarea></label>
+    <div class="row" style="gap:8px">
+      <button class="btn primary full" data-action="save-manual">Save as a new version</button>
+      ${hasHtmlTags ? `<button class="btn ghost" style="white-space:nowrap" data-action="clean-manual-tags">Clean &lt;b&gt; tags</button>` : ''}
+    </div>
+    ${aiReviseTool('manual', 'Manual', 'e.g. Reorganize with numbered sections and add a rule about knee warm-ups')}
   </div>`;
 }
 
@@ -68,8 +147,8 @@ export function exerciseSheet(exercise) {
   const field = (id, label, value, type = 'text') => `<label>${h(label)}
     <input id="ex-${id}" type="${type}" value="${h(value ?? '')}"></label>`;
 
-  return `<h2>${e.id ? h(e.name) : 'New exercise'}</h2>
-    ${field('name', 'Name', e.name)}
+  return `<h2>${e.id ? cleanText(e.name) : 'New exercise'}</h2>
+    ${field('name', 'Name', e.name ?? '')}
     ${field('primary_muscle', 'Primary muscle', e.primary_muscle)}
     ${field('secondary_muscles', 'Secondary muscles (comma separated)', (e.secondary_muscles ?? []).join(', '))}
     ${field('equipment', 'Equipment', e.equipment)}
@@ -85,8 +164,8 @@ export function exerciseSheet(exercise) {
       <option value="per_hand"${e.load_mode === 'per_hand' ? ' selected' : ''}>per hand</option>
     </select></label>
     ${field('movement_tags', 'Movement tags (comma separated)', (e.movement_tags ?? []).join(', '))}
-    <label>Cues<textarea id="ex-cues" rows="2">${h(e.cues ?? '')}</textarea></label>
-    <label>Coaching flag<input id="ex-flag" type="text" value="${h(e.flag ?? '')}"
+    <label>Cues<textarea id="ex-cues" rows="2">${cleanText(e.cues ?? '')}</textarea></label>
+    <label>Coaching flag<input id="ex-flag" type="text" value="${cleanText(e.flag ?? '')}"
       placeholder="left shoulder: stop at 8"></label>
     <label class="row"><input id="ex-active" type="checkbox" style="width:auto;min-height:auto"
       ${e.active === false ? '' : 'checked'}> active</label>
@@ -99,16 +178,17 @@ export function exerciseSheet(exercise) {
 function exercisesCard() {
   const list = [...store.state.exercises].sort((a, b) => String(a.name).localeCompare(String(b.name)));
   return `<div class="card">
-    <div class="card-title"><h3>Exercises</h3>
+    <div class="card-title"><h3>3 · Exercise Library (${list.length})</h3>
       <button class="btn sm" data-action="new-exercise">Add</button></div>
     ${list.length === 0 ? '<p class="muted small">None yet.</p>' : ''}
-    ${list.map((e) => `<button class="exrow" data-action="edit-exercise" data-id="${h(e.id)}">
+    ${list.map((e, idx) => `<button class="exrow" data-action="edit-exercise" data-id="${h(e.id)}">
+      <span class="ex-num">${idx + 1}</span>
       <div class="grow">
-        <div class="name">${h(e.name)}</div>
+        <div class="name">${cleanText(e.name)}</div>
         <div class="sub muted">${h(e.primary_muscle)} · ${h(e.equipment)}${e.load_mode === 'per_hand' ? ' · per hand' : ''}</div>
         <div class="sub">
           ${e.active === false ? '<span class="pill">inactive</span>' : ''}
-          ${e.flag ? `<span class="pill flag">${h(e.flag)}</span>` : ''}
+          ${e.flag ? `<span class="pill flag">${cleanText(e.flag)}</span>` : ''}
         </div>
       </div>
       <div class="target small">${h(String(e.increment ?? ''))} ${h(e.unit ?? '')}</div>
@@ -240,6 +320,39 @@ export const actions = {
     }
     await store.saveDocument('manual', body);
     toast(`Manual saved as version ${store.state.manualVersion}`);
+    nav.refresh();
+  },
+
+  'clean-manual-tags': () => {
+    const field = el('manual-md');
+    if (!field) return;
+    field.value = field.value
+      .replace(/<\s*(b|strong)\s*>(.*?)<\s*\/\s*\1\s*>/gis, '**$2**')
+      .replace(/<\s*(i|em)\s*>(.*?)<\s*\/\s*\1\s*>/gis, '*$2*')
+      .replace(/<\s*code\s*>(.*?)<\s*\/\s*code\s*>/gis, '`$1`')
+      .replace(/<\s*\/?\s*(b|strong|i|em|code|u|span|br)\s*\/?\s*>/gi, '');
+    toast('Converted HTML tags to Markdown — click Save to store');
+  },
+
+  'ai-revise': async (node) => {
+    const target = node.dataset.target;
+    if (target !== 'rules' && target !== 'manual') return;
+    const promptEl = el(`ai-${target}-prompt`);
+    const model = el(`ai-${target}-model`)?.value ?? 'sonnet';
+    const effort = el(`ai-${target}-effort`)?.value ?? 'high';
+    const instructions = promptEl?.value.trim() ?? '';
+    if (!instructions) {
+      toast(`Describe what Claude should change in ${target}`, 'bad');
+      return;
+    }
+    try {
+      const encoded = encodeJobPrompt({ model, effort, target, instructions });
+      await store.dispatchJob('ask', encoded, null);
+      if (promptEl) promptEl.value = '';
+      toast(`Sent ${target} revision to Claude`);
+    } catch (err) {
+      toast(err.message ?? 'Could not dispatch AI revision', 'bad');
+    }
     nav.refresh();
   },
 

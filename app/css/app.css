@@ -118,11 +118,37 @@ h3 {
 
 p { margin: 0 0 10px; }
 
-ul {
+ul, ol {
   margin: 6px 0 12px;
-  padding-left: 20px;
+  padding-left: 22px;
 }
-li { margin-bottom: 4px; }
+li { margin-bottom: 5px; line-height: 1.48; }
+ol > li::marker {
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.md-quote {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+  border-radius: 0 8px 8px 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.md-hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 14px 0;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin: 8px 0 12px;
+}
 
 code {
   font-family: var(--mono);
@@ -724,7 +750,176 @@ svg.chart { width: 100%; height: auto; overflow: visible; }
   letter-spacing: -0.01em;
 }
 
+.ex-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.meta-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.range-tabs {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 2px;
+  gap: 2px;
+}
+.range-tab {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.range-tab.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ---- training calendar ---- */
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cal-title {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+.cal-dow {
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding-bottom: 4px;
+}
+.cal-day {
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 2px;
+  position: relative;
+}
+.cal-day.empty {
+  background: transparent;
+}
+.cal-day.today {
+  border-color: var(--text);
+  color: var(--text);
+}
+button.cal-day {
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.15s, background-color 0.15s;
+}
+button.cal-day:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.cal-day.done {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--accent);
+  font-weight: 700;
+}
+.cal-day.partial {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 50%, transparent);
+  color: var(--warn);
+  font-weight: 700;
+}
+.cal-day.rest {
+  border-color: var(--line);
+  color: var(--text);
+}
+.cal-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.cal-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.cal-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.cal-swatch.done { background: var(--accent); }
+.cal-swatch.partial { background: var(--warn); }
+.cal-swatch.rest { background: var(--line); }
+
 .chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .series-area { fill: var(--accent-soft); }
 .chart .series { stroke: var(--accent); }
 .chart .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
 .chart .pt-label { fill: var(--text); font-size: 11px; font-weight: 600; font-family: var(--mono); }

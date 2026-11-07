@@ -3,7 +3,7 @@
    is asked of a model. */
 
 import * as store from './store.js';
-import { h, fmtLoad, fmtDate, fmtRest, toast, sheet, closeSheet, el } from './ui.js';
+import { h, cleanText, fmtLoad, fmtDate, fmtRest, toast, sheet, closeSheet, el } from './ui.js';
 import { nav } from './nav.js';
 import { planForDay, volumeVsTarget, ymd, isoWeekStart, nextDayIndex } from './engine.js';
 
@@ -34,22 +34,24 @@ function empty(title, body, tab, cta) {
 
 function planCard(plan, session) {
   const flags = plan.flags.length === 0 ? '' : `<div class="banner warn">${plan.flags
-    .map((f) => `<div><b>${h(f.exercise)}</b> — ${h(f.flag)}</div>`).join('')}</div>`;
+    .map((f) => `<div><b>${h(f.exercise)}</b> — ${cleanText(f.flag)}</div>`).join('')}</div>`;
 
-  const rows = plan.exercises.map((e) => {
+  const rows = plan.exercises.map((e, idx) => {
     const marks = [
       e.nonNegotiable ? '<span class="pill must">non-negotiable</span>' : '',
       e.cutOrder !== null ? `<span class="pill">cut ${e.cutOrder}</span>` : '',
-      e.label ? `<span class="pill flag">${h(e.label)}</span>` : '',
-    ].join(' ');
+      e.label ? `<span class="pill flag">${cleanText(e.label)}</span>` : '',
+    ].filter(Boolean).join(' ');
     const last = e.lastLogged?.weight !== null && e.lastLogged?.weight !== undefined
       ? `last ${fmtLoad(e.lastLogged.weight, e.lastLogged.unit, e.perHand)} × ${h((e.lastLogged.reps ?? []).join('/'))} on ${fmtDate(e.lastLogged.date)}`
       : 'no history yet';
     return `<div class="exrow">
+      <span class="ex-num">${idx + 1}</span>
       <div class="grow">
         <div class="name">${h(e.name)}</div>
         <div class="sub">${last} · rest ${fmtRest(e.restS)}</div>
-        <div class="sub">${marks}</div>
+        ${e.notes ? `<div class="sub muted">${cleanText(e.notes)}</div>` : ''}
+        ${marks ? `<div class="sub">${marks}</div>` : ''}
       </div>
       <div class="target">${e.sets} &times; ${e.reps}<br><span class="small">${fmtLoad(e.weight, e.unit, e.perHand)}</span></div>
     </div>`;
@@ -62,10 +64,10 @@ function planCard(plan, session) {
   return `${flags}
     <div class="card">
       <div class="card-title">
-        <div><div class="eyebrow">Next up</div><h2>${h(plan.dayName ?? 'Training')}</h2></div>
+        <div><div class="eyebrow">1 · Next up</div><h2>${h(plan.dayName ?? 'Training')}</h2></div>
         <span class="small muted">${plan.exercises.length} exercises</span>
       </div>
-      ${plan.warmupNote ? `<p class="small muted">Warm-up: ${h(plan.warmupNote)}</p>` : ''}
+      ${plan.warmupNote ? `<p class="small muted"><b>Warm-up:</b> ${cleanText(plan.warmupNote)}</p>` : ''}
       ${rows}
     </div>
     ${button}`;
@@ -77,7 +79,8 @@ function volumeCard() {
   const rows = volumeVsTarget({ weeklyVolume: thisWeek, rules: store.state.rules });
   if (rows.length === 0) return '';
 
-  const body = rows.map((r) => `<tr class="${r.shortBy > 0 ? 'short' : ''}">
+  const body = rows.map((r, idx) => `<tr class="${r.shortBy > 0 ? 'short' : ''}">
+      <td class="mono muted">${idx + 1}</td>
       <td>${h(r.muscle)}</td>
       <td class="n">${r.sets}</td>
       <td class="n">${r.target}</td>
@@ -85,8 +88,8 @@ function volumeCard() {
     </tr>`).join('');
 
   return `<div class="card">
-    <div class="card-title"><h3>Sets this week</h3><span class="small muted">vs minimum</span></div>
-    <table class="vol"><thead><tr><th>Muscle</th><th class="n">Done</th><th class="n">Min</th><th class="n"></th></tr></thead>
+    <div class="card-title"><div><div class="eyebrow">2 · Weekly Target</div><h3>Sets this week</h3></div><span class="small muted">vs minimum</span></div>
+    <table class="vol"><thead><tr><th>#</th><th>Muscle</th><th class="n">Done</th><th class="n">Min</th><th class="n">Status</th></tr></thead>
     <tbody>${body}</tbody></table>
   </div>`;
 }

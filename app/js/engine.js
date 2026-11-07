@@ -350,3 +350,104 @@ export function plannedWeeklyVolume({ days, slots, exercises, rules, perWeekRate
     return { muscle, sets, target, shortBy: Math.max(0, Math.round((target - sets) * 100) / 100) };
   });
 }
+
+/* Parses Apple Fitness / Apple Watch workout text (from iOS Live Text OCR, an
+   iOS Shortcut, or a quick paste) into the finish-session fields. Handles one
+   or two screenshots concatenated in any order. */
+export function parseAppleWatchText(raw) {
+  const out = {
+    duration_min: null,
+    calories: null,
+    avg_hr: null,
+    peak_hr: null,
+    effort_1_10: null,
+    hr_zones: null,
+  };
+  const text = String(raw ?? '').replace(/\r/g, '');
+  if (!text.trim()) return out;
+
+  // 1. Duration: "Workout Time 0:36:49" (H:MM:SS or MM:SS), or "37 min".
+  const wtMatch = text.match(/Workout\s*Time[\s:]*(\d{1,2}):(\d{2})(?::(\d{2}))?/i);
+  if (wtMatch) {
+    if (wtMatch[3] !== undefined) {
+      const h = Number(wtMatch[1]);
+      const m = Number(wtMatch[2]);
+      const s = Number(wtMatch[3]);
+      out.duration_min = Math.round(h * 60 + m + s / 60);
+    } else {
+      const m = Number(wtMatch[1]);
+      const s = Number(wtMatch[2]);
+      out.duration_min = Math.round(m + s / 60);
+    }
+  } else {
+    const hmsMatch = text.match(/\b(\d{1,2}):(\d{2}):(\d{2})\b/);
+    if (hmsMatch) {
+      out.duration_min = Math.round(
+        Number(hmsMatch[1]) * 60 + Number(hmsMatch[2]) + Number(hmsMatch[3]) / 60,
+      );
+    } else {
+      const minMatch = text.match(/(?:duration|workout\s*time)?[\s:]*(\d{1,3})\s*(?:min|mins|minutes)\b/i);
+      if (minMatch) out.duration_min = Number(minMatch[1]);
+    }
+  }
+
+  // 2. Calories: prefer Active Calories ("Active Calories 367CAL"), else top "367CAL" or "Total Calories 437CAL".
+  const activeCal = text.match(/Active\s*(?:Calories|Energy)[\s:]*(\d{1,4})\s*(?:CAL|KCAL)?/i)
+    ?? text.match(/(\d{1,4})\s*(?:CAL|KCAL)\s*\n\s*Active\s*(?:Calories|Energy)/i);
+  if (activeCal) {
+    out.calories = Number(activeCal[1]);
+  } else {
+    const anyCal = text.match(/\b(\d{2,4})\s*(?:CAL|KCAL)\b/i);
+    if (anyCal) out.calories = Number(anyCal[1]);
+  }
+
+  // 3. Average HR: "Avg. Heart Rate 130BPM" or "130 BPM AVG".
+  const avgHr = text.match(/Avg\.?\s*Heart\s*Rate[\s:]*(\d{2,3})\s*(?:BPM)?/i)
+    ?? text.match(/\b(\d{2,3})\s*BPM\s*AVG\b/i)
+    ?? text.match(/\bavg(?:erage)?\s*hr[\s:]*(\d{2,3})\b/i);
+  if (avgHr) out.avg_hr = Number(avgHr[1]);
+
+  // 4. Effort 1-10: "Effort ± 9 All Out" or "Effort: 8".
+  const effortMatch = text.match(/Effort[\s±+\-:]*(\b10\b|[1-9])\b/i)
+    ?? text.match(/\b(\b10\b|[1-9])\s*(?:Easy|Moderate|Hard|All\s*Out)\b/i);
+  if (effortMatch) out.effort_1_10 = Number(effortMatch[1]);
+
+  // 5. HR Zones: "Zone 1 27:23 <140BPM", or compact "z1:27 z2:5".
+  const zoneMap = new Map();
+  for (const m of text.matchAll(/Zone\s*([1-5])[^\d\n]*(\d{1,2}):(\d{2})/gi)) {
+    const z = Number(m[1]);
+    const mins = Number(m[2]) + Number(m[3]) / 60;
+    const rounded = Math.round(mins);
+    const val = rounded > 0 ? rounded : (Number(m[3]) >= 30 ? 1 : 0);
+    if (val > 0) zoneMap.set(z, val);
+  }
+  if (zoneMap.size === 0) {
+    for (const m of text.matchAll(/\bz([1-5])\s*:\s*(\d{1,3})\b/gi)) {
+      const z = Number(m[1]);
+      const val = Number(m[2]);
+      if (val > 0) zoneMap.set(z, val);
+    }
+  }
+  if (zoneMap.size > 0) {
+    out.hr_zones = [...zoneMap.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([z, m]) => `z${z}:${m}`)
+      .join(' ');
+  }
+
+  // 6. Peak HR: explicit "Peak HR 174" or the Apple Fitness chart y-axis peak
+  //    printed right under the "Heart Rate" heading (before Post-Workout Heart Rate).
+  const explicitPeak = text.match(/(?:Peak|Max)\s*(?:HR|Heart\s*Rate)[\s:]*(\d{2,3})\b/i);
+  if (explicitPeak) {
+    out.peak_hr = Number(explicitPeak[1]);
+  } else {
+    const hrSection = text.split(/Post[-\s]*Workout\s*Heart\s*Rate/i)[0] ?? text;
+    const afterHeading = hrSection.match(/Heart\s*Rate\s*\n\s*(\d{2,3})\b/i);
+    if (afterHeading) {
+      const n = Number(afterHeading[1]);
+      if (n >= 60 && n <= 230 && n !== out.avg_hr) out.peak_hr = n;
+    }
+  }
+
+  return out;
+}

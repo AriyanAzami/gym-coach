@@ -3,7 +3,7 @@
    activated here. */
 
 import * as store from './store.js';
-import { h, markdown, fmtRest, toast, sheet, closeSheet, confirm, el } from './ui.js';
+import { h, cleanText, markdown, fmtRest, fmtDuration, fmtTokens, extractJobMeta, encodeJobPrompt, toast, sheet, closeSheet, confirm, el } from './ui.js';
 import { nav } from './nav.js';
 import { plannedWeeklyVolume } from './engine.js';
 
@@ -25,16 +25,17 @@ function daysView(blockId) {
     const slots = d.slots
       .filter((s) => s.day_id === day.id)
       .sort((a, b) => a.position - b.position);
-    const rows = slots.map((s) => {
+    const rows = slots.map((s, idx) => {
       const marks = [
         s.non_negotiable ? '<span class="pill must">non-negotiable</span>' : '',
         s.cut_order !== null && s.cut_order !== undefined ? `<span class="pill">cut ${s.cut_order}</span>` : '',
-      ].join(' ');
+      ].filter(Boolean).join(' ');
       return `<div class="exrow">
+        <span class="ex-num">${idx + 1}</span>
         <div class="grow">
           <div class="name">${h(nameOf(s.exercise_id))}</div>
           <div class="sub">rest ${fmtRest(s.rest_s)} ${marks}</div>
-          ${s.notes ? `<div class="sub muted">${h(s.notes)}</div>` : ''}
+          ${s.notes ? `<div class="sub muted">${cleanText(s.notes)}</div>` : ''}
         </div>
         <div class="target">${s.sets} &times; ${s.rep_min}-${s.rep_max}</div>
       </div>`;
@@ -45,7 +46,7 @@ function daysView(blockId) {
         <div><div class="eyebrow">Day ${day.day_index + 1}</div><h3>${h(day.name)}</h3></div>
         <span class="small muted">${slots.length} exercises</span>
       </div>
-      ${day.warmup_note ? `<p class="small muted">Warm-up: ${h(day.warmup_note)}</p>` : ''}
+      ${day.warmup_note ? `<p class="small muted"><b>Warm-up:</b> ${cleanText(day.warmup_note)}</p>` : ''}
       ${rows}
     </div>`;
   }).join('');
@@ -64,7 +65,8 @@ function volumeTable(blockId) {
   if (rows.length === 0) return '';
 
   const rate = store.state.trainingRate?.per_week_4w;
-  const body = rows.map((r) => `<tr class="${r.shortBy > 0 ? 'short' : ''}">
+  const body = rows.map((r, idx) => `<tr class="${r.shortBy > 0 ? 'short' : ''}">
+      <td class="mono muted">${idx + 1}</td>
       <td>${h(r.muscle)}</td>
       <td class="n">${r.sets}</td>
       <td class="n">${r.target}</td>
@@ -72,9 +74,9 @@ function volumeTable(blockId) {
     </tr>`).join('');
 
   return `<div class="card">
-    <div class="card-title"><h3>Weekly sets</h3>
+    <div class="card-title"><div><div class="eyebrow">Volume Gate</div><h3>Weekly sets</h3></div>
       <span class="small muted">at ${rate ? `${rate}/week` : 'one cycle a week'}</span></div>
-    <table class="vol"><thead><tr><th>Muscle</th><th class="n">Planned</th><th class="n">Min</th><th class="n"></th></tr></thead>
+    <table class="vol"><thead><tr><th>#</th><th>Muscle</th><th class="n">Planned</th><th class="n">Min</th><th class="n">Status</th></tr></thead>
     <tbody>${body}</tbody></table>
   </div>`;
 }
@@ -90,11 +92,27 @@ function jobsView() {
   }).join('');
 }
 
+function modelPickerHtml(defaultModel = 'opus', defaultEffort = 'high') {
+  return `<div class="grid2">
+    <label>Brain / Model<select id="job-model">
+      <option value="opus"${defaultModel === 'opus' ? ' selected' : ''}>Claude Opus 4.6 (Deep)</option>
+      <option value="sonnet"${defaultModel === 'sonnet' ? ' selected' : ''}>Claude Sonnet 5 (Fast)</option>
+    </select></label>
+    <label>Thinking Effort<select id="job-effort">
+      <option value="low"${defaultEffort === 'low' ? ' selected' : ''}>Low</option>
+      <option value="medium"${defaultEffort === 'medium' ? ' selected' : ''}>Medium</option>
+      <option value="high"${defaultEffort === 'high' ? ' selected' : ''}>High</option>
+      <option value="max"${defaultEffort === 'max' ? ' selected' : ''}>Max</option>
+    </select></label>
+  </div>`;
+}
+
 export function generateSheet() {
   return `<h2>Generate a block</h2>
     <p class="small muted">How should the next block be built? Anything you say here
     is binding on the coach, alongside your manual and rules.</p>
-    <label>Instructions<textarea id="job-instructions" rows="6"
+    ${modelPickerHtml('opus', 'high')}
+    <label>Instructions<textarea id="job-instructions" rows="5"
       placeholder="e.g. four days, more upper back, keep the squat first"></textarea></label>
     <div class="grid2">
       <button class="btn ghost" data-sheet="cancel">Cancel</button>
@@ -105,7 +123,8 @@ export function generateSheet() {
 export function reviseSheet(block) {
   return `<h2>Request changes</h2>
     <p class="small muted">What should change about ${h(block.name)}?</p>
-    <label>Comment<textarea id="job-instructions" rows="6"
+    ${modelPickerHtml('opus', 'high')}
+    <label>Comment<textarea id="job-instructions" rows="5"
       placeholder="e.g. swap the leg press for a hack squat, add a set of rows"></textarea></label>
     <div class="grid2">
       <button class="btn ghost" data-sheet="cancel">Cancel</button>
@@ -179,7 +198,10 @@ export async function mount() {
 }
 
 async function submit(kind, targetBlockId) {
-  const instructions = el('job-instructions').value.trim();
+  const raw = el('job-instructions')?.value.trim() ?? '';
+  const model = el('job-model')?.value ?? 'opus';
+  const effort = el('job-effort')?.value ?? 'high';
+  const instructions = encodeJobPrompt({ model, effort, instructions: raw });
   closeSheet();
   try {
     await store.dispatchJob(kind, instructions, targetBlockId);

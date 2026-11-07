@@ -12,9 +12,44 @@ import { readFileSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { serviceClient, rows, getJob, setJobStatus, shortError } from './lib/db.mjs';
 import { validateBlock } from './validate.mjs';
+import { validateRules } from './lib/rules.mjs';
 
 const BLOCK_KINDS = ['block', 'revise_block'];
 const norm = (s) => String(s ?? '').trim().toLowerCase();
+
+function collectRunMeta(job, context, outputChars = 0) {
+  const startedMs = job.started_at ? Date.parse(job.started_at) : NaN;
+  const duration_s = Number.isFinite(startedMs) && startedMs > 0
+    ? Math.max(1, Math.round((Date.now() - startedMs) / 1000))
+    : null;
+
+  let input_tokens = null;
+  let output_tokens = null;
+  if (existsSync('work/claude.log')) {
+    const log = readFileSync('work/claude.log', 'utf8');
+    const inMatch = log.match(/"input_tokens"\s*:\s*(\d+)/i) || log.match(/input tokens?:\s*(\d+)/i);
+    const outMatch = log.match(/"output_tokens"\s*:\s*(\d+)/i) || log.match(/output tokens?:\s*(\d+)/i);
+    if (inMatch) input_tokens = Number(inMatch[1]);
+    if (outMatch) output_tokens = Number(outMatch[1]);
+  }
+  if (input_tokens === null) {
+    const ctxChars = existsSync('work/context.json') ? readFileSync('work/context.json', 'utf8').length : 4000;
+    input_tokens = Math.max(100, Math.round(ctxChars / 4));
+  }
+  if (output_tokens === null && outputChars > 0) {
+    output_tokens = Math.max(25, Math.round(outputChars / 4));
+  }
+  const total_tokens = (input_tokens ?? 0) + (output_tokens ?? 0);
+
+  return {
+    model: context?.job?.model ?? 'opus',
+    effort: context?.job?.effort ?? 'high',
+    duration_s,
+    input_tokens,
+    output_tokens,
+    total_tokens: total_tokens > 0 ? total_tokens : null,
+  };
+}
 
 /* Pure: turns a validated plan into the rows that will be inserted. Slots keep
    their exercise name because a new exercise has no id until it is inserted. */
@@ -132,11 +167,41 @@ async function saveBlock(client, job, context) {
   return { output_md: null };
 }
 
-function readMarkdown() {
+async function saveTargetDocument(client, job, context) {
+  const target = context.job?.target;
+  const userId = job.user_id;
+  if (target === 'rules') {
+    if (!existsSync('work/rules.json')) throw new Error('work/rules.json was not written');
+    const updated = JSON.parse(readFileSync('work/rules.json', 'utf8'));
+    const errors = validateRules(updated);
+    if (errors.length > 0) {
+      throw new Error(`revised rules failed validation: ${errors[0]}`);
+    }
+    const existing = await client.from('documents')
+      .select('version').eq('key', 'rules').order('version', { ascending: false }).limit(1).then(rows);
+    const nextVersion = ((existing[0]?.version ?? context.rules_version) || 0) + 1;
+    await client.from('documents').insert({
+      key: 'rules', version: nextVersion, body_json: updated, body_md: null, user_id: userId,
+    }).then(rows);
+  } else if (target === 'manual') {
+    if (!existsSync('work/manual.md')) throw new Error('work/manual.md was not written');
+    const updatedMd = readFileSync('work/manual.md', 'utf8').trim();
+    if (!updatedMd) throw new Error('work/manual.md is empty');
+    const existing = await client.from('documents')
+      .select('version').eq('key', 'manual').order('version', { ascending: false }).limit(1).then(rows);
+    const nextVersion = ((existing[0]?.version ?? context.manual_version) || 0) + 1;
+    await client.from('documents').insert({
+      key: 'manual', version: nextVersion, body_json: null, body_md: updatedMd, user_id: userId,
+    }).then(rows);
+  }
+}
+
+function readMarkdown(job, context) {
   if (!existsSync('work/output.md')) throw new Error('work/output.md was not written');
   const text = readFileSync('work/output.md', 'utf8').trim();
   if (!text) throw new Error('work/output.md is empty');
-  return { output_md: text };
+  const meta = collectRunMeta(job, context, text.length);
+  return { output_md: `<!-- coach-meta: ${JSON.stringify(meta)} -->\n${text}` };
 }
 
 async function main(jobId) {
@@ -150,9 +215,13 @@ async function main(jobId) {
     const job = await getJob(client, jobId);
     const context = JSON.parse(readFileSync('work/context.json', 'utf8'));
 
+    if (!BLOCK_KINDS.includes(job.kind) && context.job?.target) {
+      await saveTargetDocument(client, job, context);
+    }
+
     const result = BLOCK_KINDS.includes(job.kind)
       ? await saveBlock(client, job, context)
-      : readMarkdown();
+      : readMarkdown(job, context);
 
     // Notes that went into this job are spent, whatever the job produced.
     const consumed = context.consumed_note_ids ?? [];

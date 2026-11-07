@@ -64,7 +64,7 @@ export function render(params = {}) {
       <p class="muted">This session has no exercises on it.</p></div>`;
   }
 
-  const rows = detail.exercises.map((x) => {
+  const rows = detail.exercises.map((x, idx) => {
     const exercise = exerciseOf(x.exercise_id);
     const perHand = exercise?.load_mode === 'per_hand';
     const mine = setsOf(detail, x.id);
@@ -77,6 +77,7 @@ export function render(params = {}) {
 
     return `<div class="card">
       <div class="card-title">
+        <span class="ex-num">${idx + 1}</span>
         <div class="grow">
           <h3>${h(nameOf(x.exercise_id))}</h3>
           <div class="sub muted">target ${x.target_sets} &times; ${x.target_reps} @ ${fmtLoad(x.target_weight, x.target_unit, perHand)}${slot ? ` · rest ${fmtRest(slot.rest_s)}` : ''}</div>

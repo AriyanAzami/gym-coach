@@ -4,6 +4,13 @@ export const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[c]));
 
+/* Strips benign Notion export tags (<b>, <i>, <code>) before HTML-escaping. */
+export const cleanText = (s) => h(
+  String(s ?? '')
+    .replace(/<\/?(?:b|i|strong|em|code)>/gi, '')
+    .replace(/\\~/g, '~'),
+);
+
 export const el = (id) => document.getElementById(id);
 export const q = (sel, root) => (root ?? document).querySelector(sel);
 export const qa = (sel, root) => Array.from((root ?? document).querySelectorAll(sel));
@@ -30,31 +37,192 @@ export function fmtRest(seconds) {
   return seconds >= 120 && seconds % 60 === 0 ? `${seconds / 60} min` : `${seconds}s`;
 }
 
-/* The smallest markdown subset the coach's rationale and check-ins need.
-   Escaped first, so nothing a model writes can inject markup. */
+export function fmtDuration(seconds) {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds < 0) return null;
+  const s = Math.round(seconds);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
+}
+
+export function fmtTokens(n) {
+  if (n === null || n === undefined || !Number.isFinite(n) || n <= 0) return null;
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k tokens` : `${Math.round(n)} tokens`;
+}
+
+const JOB_HEADER_RE = /^\[([^\]]+)\]\s*\n?/;
+
+export function encodeJobPrompt({ model = 'opus', effort = 'high', target = null, instructions = '' } = {}) {
+  const parts = [`model=${model}`, `effort=${effort}`];
+  if (target) parts.push(`target=${target}`);
+  const body = String(instructions ?? '').trim();
+  return `[${parts.join(' ')}]${body ? `\n${body}` : ''}`;
+}
+
+export function parseJobPrompt(raw) {
+  const str = String(raw ?? '');
+  const m = str.match(JOB_HEADER_RE);
+  if (!m) return { model: null, effort: null, target: null, text: str.trim() };
+  const kv = {};
+  for (const token of m[1].trim().split(/\s+/)) {
+    const [k, v] = token.split('=');
+    if (k && v) kv[k.toLowerCase()] = v.toLowerCase();
+  }
+  return {
+    model: kv.model ?? null,
+    effort: kv.effort ?? null,
+    target: kv.target ?? null,
+    text: str.slice(m[0].length).trim(),
+  };
+}
+
+const META_COMMENT_RE = /^<!--\s*coach-meta:\s*(\{[^\n]*?\})\s*-->\s*\n?/;
+
+export function extractJobMeta(job) {
+  const rawMd = String(job?.output_md ?? '');
+  let meta = {};
+  let body = rawMd;
+  const m = rawMd.match(META_COMMENT_RE);
+  if (m) {
+    try { meta = JSON.parse(m[1]); } catch { meta = {}; }
+    body = rawMd.slice(m[0].length);
+  }
+  const parsedPrompt = parseJobPrompt(job?.instructions);
+  const model = meta.model ?? parsedPrompt.model ?? 'opus';
+  const effort = meta.effort ?? parsedPrompt.effort ?? 'high';
+  const target = meta.target ?? parsedPrompt.target ?? null;
+
+  let durationS = typeof meta.duration_s === 'number' ? meta.duration_s : null;
+  if (durationS === null && job?.started_at && job?.finished_at) {
+    const diff = (new Date(job.finished_at).getTime() - new Date(job.started_at).getTime()) / 1000;
+    if (Number.isFinite(diff) && diff >= 0) durationS = Math.round(diff);
+  } else if (durationS === null && job?.created_at && job?.finished_at) {
+    const diff = (new Date(job.finished_at).getTime() - new Date(job.created_at).getTime()) / 1000;
+    if (Number.isFinite(diff) && diff >= 0) durationS = Math.round(diff);
+  }
+
+  const inputTokens = typeof meta.input_tokens === 'number' ? meta.input_tokens : null;
+  const outputTokens = typeof meta.output_tokens === 'number' ? meta.output_tokens : null;
+  const totalTokens = typeof meta.total_tokens === 'number'
+    ? meta.total_tokens
+    : ((inputTokens ?? 0) + (outputTokens ?? 0) || (typeof meta.tokens === 'number' ? meta.tokens : null));
+  const turns = typeof meta.turns === 'number' ? meta.turns : null;
+  const modelLabel = model === 'sonnet' ? 'Claude Sonnet 5' : 'Claude Opus 4.6';
+  const effortLabel = effort ? effort.charAt(0).toUpperCase() + effort.slice(1) : 'High';
+
+  return {
+    model,
+    modelLabel,
+    effort,
+    effortLabel,
+    target,
+    question: parsedPrompt.text,
+    durationS,
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    turns,
+    body,
+  };
+}
+
+/* Rich markdown subset for the coach's rationale, check-ins, manual and
+   decisions. Normalises Notion's <b>/<i>/<code> export tags first, then
+   escapes all HTML so nothing a model or import writes can inject markup. */
 export function markdown(text) {
-  const lines = h(text ?? '').split('\n');
+  const normalized = String(text ?? '')
+    .replace(META_COMMENT_RE, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<(?:b|strong)>([\s\S]*?)<\/(?:b|strong)>/gi, '**$1**')
+    .replace(/<(?:i|em)>([\s\S]*?)<\/(?:i|em)>/gi, '*$1*')
+    .replace(/<code>([\s\S]*?)<\/code>/gi, '`$1`')
+    .replace(/<\/?(?:b|i|strong|em|code)>/gi, '')
+    .replace(/\\~/g, '~');
+
+  const lines = h(normalized).split('\n');
   const out = [];
-  let list = false;
+  let listKind = null; // 'ul' | 'ol' | null
+  let tableRows = [];
+
+  const closeList = () => {
+    if (listKind) {
+      out.push(`</${listKind}>`);
+      listKind = null;
+    }
+  };
+
+  const flushTable = () => {
+    if (tableRows.length === 0) return;
+    const isSep = (row) => row.every((c) => /^[:\-\s]+$/.test(c));
+    const headRow = tableRows[0];
+    const bodyRows = tableRows.slice(1).filter((r) => !isSep(r));
+    out.push('<div class="table-wrap"><table class="vol md-table">');
+    out.push(`<thead><tr>${headRow.map((c) => `<th>${inline(c)}</th>`).join('')}</tr></thead>`);
+    if (bodyRows.length > 0) {
+      out.push(`<tbody>${bodyRows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody>`);
+    }
+    out.push('</table></div>');
+    tableRows = [];
+  };
+
   for (const line of lines) {
-    const item = line.match(/^\s*[-*]\s+(.*)$/);
-    if (item) {
-      if (!list) { out.push('<ul>'); list = true; }
-      out.push(`<li>${inline(item[1])}</li>`);
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('|') && trimmed.endsWith('|') && trimmed.length > 2) {
+      closeList();
+      const cells = trimmed.slice(1, -1).split('|').map((c) => c.trim());
+      tableRows.push(cells);
       continue;
     }
-    if (list) { out.push('</ul>'); list = false; }
+    flushTable();
+
+    const ulItem = line.match(/^\s*[-*•]\s+(.*)$/);
+    if (ulItem) {
+      if (listKind !== 'ul') { closeList(); out.push('<ul>'); listKind = 'ul'; }
+      out.push(`<li>${inline(ulItem[1])}</li>`);
+      continue;
+    }
+
+    const olItem = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
+    if (olItem) {
+      if (listKind !== 'ol') { closeList(); out.push('<ol>'); listKind = 'ol'; }
+      out.push(`<li>${inline(olItem[2])}</li>`);
+      continue;
+    }
+
+    closeList();
+
+    if (/^(?:---+|\*\*\*+)\s*$/.test(trimmed)) {
+      out.push('<hr class="md-hr">');
+      continue;
+    }
+
+    const quote = line.match(/^\s*&gt;\s?(.*)$/);
+    if (quote) {
+      out.push(`<blockquote class="md-quote">${inline(quote[1])}</blockquote>`);
+      continue;
+    }
+
     const head = line.match(/^(#{1,4})\s+(.*)$/);
-    if (head) out.push(`<h${head[1].length + 1}>${inline(head[2])}</h${head[1].length + 1}>`);
-    else if (line.trim() === '') out.push('');
-    else out.push(`<p>${inline(line)}</p>`);
+    if (head) {
+      const level = Math.min(head[1].length + 1, 5);
+      out.push(`<h${level}>${inline(head[2])}</h${level}>`);
+    } else if (trimmed === '') {
+      out.push('');
+    } else {
+      out.push(`<p>${inline(line)}</p>`);
+    }
   }
-  if (list) out.push('</ul>');
+
+  closeList();
+  flushTable();
   return out.join('\n');
 }
 
 const inline = (s) => s
   .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
   .replace(/`([^`]+)`/g, '<code>$1</code>');
 
 let toastTimer = null;

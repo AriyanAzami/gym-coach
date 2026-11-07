@@ -24,10 +24,10 @@ const EMPTY = (title, w, hgt) => `<figure class="chart-fig">
 /* A line chart of one measure over time. x values are only used for ordering and
    tooltips; points are evenly spaced, because a weigh-in every nine days and one
    every six should not squash the chart. */
-export function line(points, { title = '', width = 320, height = 150, unit = '' } = {}) {
+export function line(points, { title = '', width = 500, height = 185, unit = '' } = {}) {
   if (!points || points.length === 0) return EMPTY(title, width, height);
 
-  const pad = { top: 14, right: 46, bottom: 22, left: 10 };
+  const pad = { top: 20, right: 54, bottom: 26, left: 38 };
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
 
@@ -48,8 +48,15 @@ export function line(points, { title = '', width = 320, height = 150, unit = '' 
 
   const grid = [0, 0.5, 1].map((f) => {
     const y = pad.top + plotH * f;
-    return `<line class="grid" x1="${pad.left}" y1="${round(y)}" x2="${pad.left + plotW}" y2="${round(y)}"/>`;
+    const val = round(base + span * (1 - f));
+    return `<line class="grid" x1="${pad.left}" y1="${round(y)}" x2="${pad.left + plotW}" y2="${round(y)}"/>`
+      + `<text class="ax" x="${pad.left - 6}" y="${round(y + 3)}" text-anchor="end">${val}</text>`;
   }).join('');
+
+  const bottomY = round(pad.top + plotH);
+  const area = points.length > 1
+    ? `<polygon class="series-area" points="${round(coords[0][0])},${bottomY} ${coords.map(([x, y]) => `${round(x)},${round(y)}`).join(' ')} ${round(coords.at(-1)[0])},${bottomY}"/>`
+    : '';
 
   const path = points.length > 1
     ? `<polyline class="series" fill="none" stroke-width="2" stroke-linecap="round"
@@ -70,7 +77,7 @@ export function line(points, { title = '', width = 320, height = 150, unit = '' 
     const [x, y] = coords[i];
     const rising = neighbour !== undefined && Number(points[neighbour].y) > Number(p.y);
     const dy = rising ? 16 : -9;
-    const clamped = Math.min(Math.max(y + dy, 11), height - pad.bottom - 7);
+    const clamped = Math.min(Math.max(y + dy, 12), height - pad.bottom - 7);
     return `<text class="pt-label" x="${round(x)}" y="${round(clamped)}" text-anchor="${anchor}">${
       esc(p.label ?? `${p.y}${unit ? ` ${unit}` : ''}`)}</text>`;
   };
@@ -79,14 +86,20 @@ export function line(points, { title = '', width = 320, height = 150, unit = '' 
     ? labelFor(0, 'middle')
     : labelFor(0, 'start', 1) + labelFor(last, 'end', last - 1);
 
+  const midIdx = points.length >= 4 ? Math.floor(points.length / 2) : -1;
+  const midAxis = midIdx > 0
+    ? `<text class="ax" x="${round(xAt(midIdx))}" y="${height - 6}" text-anchor="middle">${esc(points[midIdx].x)}</text>`
+    : '';
+
   const axis = `<text class="ax" x="${pad.left}" y="${height - 6}">${esc(points[0].x)}</text>
+    ${midAxis}
     ${points.length > 1 ? `<text class="ax" x="${pad.left + plotW}" y="${height - 6}" text-anchor="end">${esc(points.at(-1).x)}</text>` : ''}`;
 
   return `<figure class="chart-fig">
     <figcaption>${esc(title)}</figcaption>
     <svg class="chart" viewBox="0 0 ${width} ${height}" role="img"
          aria-label="${esc(title)}: ${points.length} points from ${esc(points[0].y)} to ${esc(points.at(-1).y)}">
-      ${grid}${path}${marks}${labels}${axis}
+      ${grid}${area}${path}${marks}${labels}${axis}
     </svg>
   </figure>`;
 }
@@ -94,10 +107,10 @@ export function line(points, { title = '', width = 320, height = 150, unit = '' 
 /* Horizontal bars against a per-row target. The target is a tick rather than a
    second bar, because two bars per row would read as two series. Status is in
    the text as well as the colour. */
-export function bars(rows, { title = '', width = 320, rowHeight = 30 } = {}) {
+export function bars(rows, { title = '', width = 500, rowHeight = 32 } = {}) {
   if (!rows || rows.length === 0) return EMPTY(title, width, 90);
 
-  const pad = { top: 8, left: 74, right: 58 };
+  const pad = { top: 8, left: 84, right: 72 };
   const plotW = width - pad.left - pad.right;
   const height = pad.top + rows.length * rowHeight + 6;
   const scale = Math.max(...rows.map((r) => Math.max(Number(r.value) || 0, Number(r.target) || 0)), 1);
@@ -122,8 +135,8 @@ export function bars(rows, { title = '', width = 320, rowHeight = 30 } = {}) {
             width="${round(Math.min(w, plotW))}" height="${barH}" rx="4"/>
       <line class="target-tick" x1="${round(tickX)}" y1="${round(y - 2)}"
             x2="${round(tickX)}" y2="${round(y + barH + 2)}"/>
-      <text class="bar-value" x="${pad.left + plotW + 6}" y="${round(y + barH / 2 + 4)}">${round(value)}</text>
-      <text class="bar-status${short ? ' short' : ''}" x="${pad.left + plotW + 6}" y="${round(y + barH / 2 + 14)}">${esc(status)}</text>
+      <text class="bar-value" x="${pad.left + plotW + 8}" y="${round(y + barH / 2 + 3)}">${round(value)}</text>
+      <text class="bar-status${short ? ' short' : ''}" x="${pad.left + plotW + 8}" y="${round(y + barH / 2 + 13)}">${esc(status)}</text>
     </g>`;
   }).join('');
 

@@ -12,9 +12,32 @@ import { serviceClient, rows, getJob, setJobStatus, shortError } from './lib/db.
 
 const WEEKS_OF_HISTORY = 8;
 
+/* Parses optional [model=opus|sonnet effort=low|medium|high|max target=rules|manual]
+   directive prefix from job.instructions while keeping plain instructions intact. */
+export function parseJobInstructions(raw) {
+  const s = String(raw ?? '').trim();
+  const m = s.match(/^\[([^\]]+)\]\s*([\s\S]*)$/);
+  let model = 'opus';
+  let effort = 'high';
+  let target = null;
+  let instructions = raw ?? null;
+  if (m) {
+    let matched = false;
+    for (const kv of m[1].split(/\s+/)) {
+      const [k, v] = kv.split('=');
+      if (k === 'model' && (v === 'opus' || v === 'sonnet')) { model = v; matched = true; }
+      if (k === 'effort' && ['low', 'medium', 'high', 'max'].includes(v)) { effort = v; matched = true; }
+      if (k === 'target' && (v === 'rules' || v === 'manual')) { target = v; matched = true; }
+    }
+    if (matched) instructions = m[2].trim() || null;
+  }
+  return { model, effort, target, instructions };
+}
+
 /* Pure: turns the fetched rows into the document the model reads. Separated from
    the fetching so it can be tested without a database. */
 export function buildContext(data, job) {
+  const parsedJob = parseJobInstructions(job.instructions);
   const latest = (key) => data.documents
     .filter((d) => d.key === key)
     .sort((a, b) => b.version - a.version)[0] ?? null;
@@ -87,7 +110,13 @@ export function buildContext(data, job) {
 
   return {
     generated_for_job: job.id,
-    job: { kind: job.kind, instructions: job.instructions ?? null },
+    job: {
+      kind: job.kind,
+      instructions: parsedJob.instructions,
+      model: parsedJob.model,
+      effort: parsedJob.effort,
+      target: parsedJob.target,
+    },
 
     rules: rulesDoc?.body_json ?? null,
     rules_version: rulesDoc?.version ?? null,
