@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { prepareLoadPayload } from '../migrate/load.mjs';
+import { prepareLoadPayload, preflight } from '../migrate/load.mjs';
 import { buildVerifyReport } from '../migrate/verify.mjs';
 
 const exampleRules = JSON.parse(readFileSync('supabase/seed/rules.example.json', 'utf8'));
@@ -331,4 +331,75 @@ test('every integer column in a session row receives an integer or null', () => 
     const v = row[col];
     assert.ok(v === null || Number.isInteger(v), `${col} is ${v}, which Postgres would reject`);
   }
+});
+
+/* The pre-flight exists because two live loads aborted part-way on a row the
+   schema rejected, after hundreds of rows were already written. These assert it
+   actually catches the two that bit us, and that it passes a clean payload. */
+const minimalPayload = (over = {}) => ({
+  exercises: [{
+    name: 'Sled Push', primary_muscle: 'quads', secondary_muscles: [], equipment: 'machine',
+    increment: null, unit: null, load_mode: 'total', movement_tags: [], cues: null,
+    flag: null, active: true,
+  }],
+  sessions: [],
+  bodyMetrics: [],
+  block: null,
+  documents: { manual: 'a manual', rules: exampleRules },
+  decisions: [],
+  ...over,
+});
+
+const sessionWith = (row, exercises = []) => ({
+  row: {
+    date: '2026-09-01', kind: 'training', status: 'done', source: 'notion_import',
+    duration_min: null, calories: null, avg_hr: null, peak_hr: null,
+    effort_1_10: null, day_index: null, ...row,
+  },
+  exercises,
+});
+
+test('the pre-flight passes a clean payload', () => {
+  assert.deepEqual(preflight(minimalPayload()), []);
+});
+
+test('the pre-flight catches a float in an integer column', () => {
+  const problems = preflight(minimalPayload({ sessions: [sessionWith({ duration_min: 48.68 })] }));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /duration_min/);
+});
+
+test('the pre-flight catches a zero where the schema demands a positive integer', () => {
+  const problems = preflight(minimalPayload({
+    sessions: [sessionWith({}, [{ position: 0, exercise_name: 'Sled Push', target_sets: 0, target_reps: 9, target_weight: null, target_unit: null, deviation_note: null, sets: [] }])],
+  }));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /target_sets/);
+});
+
+test('the pre-flight catches a weight with no unit', () => {
+  const problems = preflight(minimalPayload({
+    sessions: [sessionWith({}, [{ position: 0, exercise_name: 'Sled Push', target_sets: 3, target_reps: 9, target_weight: 47, target_unit: null, deviation_note: null, sets: [] }])],
+  }));
+  assert.match(problems.join('\n'), /target_unit/);
+});
+
+test('the pre-flight catches an effort outside 1 to 10', () => {
+  const problems = preflight(minimalPayload({ sessions: [sessionWith({ effort_1_10: 11 })] }));
+  assert.match(problems[0], /effort_1_10/);
+});
+
+test('the pre-flight catches an exercise with no muscle or equipment', () => {
+  const payload = minimalPayload();
+  payload.exercises[0].primary_muscle = null;
+  payload.exercises[0].equipment = null;
+  const problems = preflight(payload);
+  assert.equal(problems.length, 2);
+});
+
+test('the pre-flight reports every problem at once, not just the first', () => {
+  const problems = preflight(minimalPayload({
+    sessions: [sessionWith({ duration_min: 1.5, effort_1_10: 99, avg_hr: 0 })],
+  }));
+  assert.ok(problems.length >= 3, `expected several problems, got ${problems.length}`);
 });

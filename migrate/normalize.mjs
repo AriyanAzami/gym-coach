@@ -157,6 +157,9 @@ function parseRepsCell(cell) {
 function parseSetsCell(cell) {
   const text = String(cell ?? '').trim();
   if (!text || DASHES.test(text)) return { sets: null, per_side: false, ok: true };
+  // Some skipped exercises are logged as "0" rather than an em-dash. Zero sets
+  // performed is a skipped exercise, not a set count of zero.
+  if (/^0+(\s|$)/.test(text)) return { sets: null, per_side: false, ok: true };
   const m = text.match(/^(\d{1,2})\s*(\/\s*(?:side|each|hand))?/i);
   if (!m) return { sets: null, per_side: false, ok: false };
   return { sets: Number(m[1]), per_side: Boolean(m[2]), ok: true };

@@ -25,6 +25,14 @@ const norm = (s) => String(s ?? '').trim().toLowerCase();
 /* For columns the schema declares as integer. */
 const asInt = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null);
 
+/* For columns the schema declares as a POSITIVE integer. A zero or negative
+   value means "not recorded" in the source, and the check constraint rejects
+   it; nulling it here keeps one odd row from aborting a load of hundreds. */
+const asPositiveInt = (v) => {
+  const n = asInt(v);
+  return n !== null && n > 0 ? n : null;
+};
+
 /* Pure transformation from migrate/out/{rows,documents}.json into DB-ready
    structures. Exported so tests can verify the mapping without a database. */
 export function prepareLoadPayload({ rowsData, docsData, userId, overrides = {} }) {
@@ -100,8 +108,8 @@ export function prepareLoadPayload({ rowsData, docsData, userId, overrides = {} 
         exercise_name: exerciseName,
         target_weight: hasWeight ? entry.weight : null,
         target_unit: hasWeight ? (entry.unit ?? 'lb') : null,
-        target_reps: entry.rep_max ?? entry.reps ?? null,
-        target_sets: entry.sets ?? null,
+        target_reps: asPositiveInt(entry.rep_max ?? entry.reps),
+        target_sets: asPositiveInt(entry.sets),
         deviation_note: entry.note ?? entry.weight_note ?? null,
         sets,
       };
@@ -194,6 +202,124 @@ export function prepareLoadPayload({ rowsData, docsData, userId, overrides = {} 
     },
     decisions,
   };
+}
+
+/* Every check constraint the schema declares, applied to the payload before a
+   single row is written.
+
+   Two live loads aborted part-way — once on a float in an integer column, once
+   on a zero in a "> 0" column — each time after hundreds of rows were already
+   in. Postgres rejects one row and the script dies; the rest never load. This
+   turns that into one list, up front, with nothing written. */
+export function preflight(payload) {
+  const problems = [];
+  const fail = (where, what) => problems.push(`${where}: ${what}`);
+  const UNITS = ['lb', 'kg'];
+
+  const posInt = (where, col, v) => {
+    if (v === null || v === undefined) return;
+    if (!Number.isInteger(v) || v <= 0) fail(where, `${col} is ${JSON.stringify(v)}, must be a positive integer`);
+  };
+  const nonNegInt = (where, col, v) => {
+    if (v === null || v === undefined) return;
+    if (!Number.isInteger(v) || v < 0) fail(where, `${col} is ${JSON.stringify(v)}, must be a non-negative integer`);
+  };
+  const unit = (where, col, v) => {
+    if (v === null || v === undefined) return;
+    if (!UNITS.includes(v)) fail(where, `${col} is ${JSON.stringify(v)}, must be lb or kg`);
+  };
+  const oneOf = (where, col, v, allowed) => {
+    if (!allowed.includes(v)) fail(where, `${col} is ${JSON.stringify(v)}, must be one of ${allowed.join(', ')}`);
+  };
+
+  for (const e of payload.exercises) {
+    const w = `exercise "${e.name}"`;
+    if (!e.name) fail(w, 'name is empty');
+    if (!e.primary_muscle) fail(w, 'primary_muscle is null (NOT NULL)');
+    if (!e.equipment) fail(w, 'equipment is null (NOT NULL)');
+    oneOf(w, 'load_mode', e.load_mode, ['total', 'per_hand']);
+    if ((e.increment === null) !== (e.unit === null)) fail(w, 'increment and unit must both be set or both null');
+    unit(w, 'unit', e.unit);
+  }
+
+  for (const s of payload.sessions) {
+    const w = `session ${s.row.date}`;
+    if (!s.row.date) fail(w, 'date is null (NOT NULL)');
+    oneOf(w, 'kind', s.row.kind, ['training', 'rest']);
+    oneOf(w, 'status', s.row.status, ['planned', 'done', 'partial', 'skipped']);
+    oneOf(w, 'source', s.row.source, ['app', 'notion_import']);
+    nonNegInt(w, 'duration_min', s.row.duration_min);
+    nonNegInt(w, 'calories', s.row.calories);
+    nonNegInt(w, 'day_index', s.row.day_index);
+    posInt(w, 'avg_hr', s.row.avg_hr);
+    posInt(w, 'peak_hr', s.row.peak_hr);
+    if (s.row.effort_1_10 !== null && s.row.effort_1_10 !== undefined
+        && !(Number.isInteger(s.row.effort_1_10) && s.row.effort_1_10 >= 1 && s.row.effort_1_10 <= 10)) {
+      fail(w, `effort_1_10 is ${s.row.effort_1_10}, must be 1 to 10`);
+    }
+
+    const positions = new Set();
+    for (const x of s.exercises) {
+      const xw = `${w} / ${x.exercise_name}`;
+      nonNegInt(xw, 'position', x.position);
+      if (positions.has(x.position)) fail(xw, `duplicate position ${x.position}`);
+      positions.add(x.position);
+      posInt(xw, 'target_sets', x.target_sets);
+      posInt(xw, 'target_reps', x.target_reps);
+      unit(xw, 'target_unit', x.target_unit);
+      if (x.target_weight !== null && x.target_unit === null) fail(xw, 'target_weight set with no target_unit');
+
+      const setNos = new Set();
+      for (const st of x.sets) {
+        posInt(xw, 'set_no', st.set_no);
+        if (setNos.has(st.set_no)) fail(xw, `duplicate set_no ${st.set_no}`);
+        setNos.add(st.set_no);
+        nonNegInt(xw, 'reps', st.reps);
+        unit(xw, 'set unit', st.unit);
+        if (st.weight !== null && st.unit === null) fail(xw, 'set weight with no unit');
+      }
+    }
+  }
+
+  for (const b of payload.bodyMetrics) {
+    const w = `body metric ${b.date}`;
+    if (!b.date) fail(w, 'date is null (NOT NULL)');
+    unit(w, 'unit', b.unit);
+    if (b.weight !== null && b.unit === null) fail(w, 'weight set with no unit');
+  }
+
+  if (payload.block) {
+    oneOf('block', 'status', payload.block.row.status, ['draft', 'active', 'archived']);
+    const { starts_on: a, ends_on: z } = payload.block.row;
+    if (a && z && z < a) fail('block', 'ends_on is before starts_on');
+    const dayIndexes = new Set();
+    for (const d of payload.block.days) {
+      const w = `block day ${d.day_index}`;
+      nonNegInt(w, 'day_index', d.day_index);
+      if (dayIndexes.has(d.day_index)) fail(w, 'duplicate day_index');
+      dayIndexes.add(d.day_index);
+      const slotPositions = new Set();
+      for (const sl of d.slots) {
+        const sw = `${w} / ${sl.exercise_name}`;
+        nonNegInt(sw, 'position', sl.position);
+        if (slotPositions.has(sl.position)) fail(sw, `duplicate position ${sl.position}`);
+        slotPositions.add(sl.position);
+        posInt(sw, 'sets', sl.sets);
+        posInt(sw, 'rep_min', sl.rep_min);
+        posInt(sw, 'rep_max', sl.rep_max);
+        if (sl.rep_min > sl.rep_max) fail(sw, `rep_min ${sl.rep_min} is above rep_max ${sl.rep_max}`);
+        nonNegInt(sw, 'rest_s', sl.rest_s);
+      }
+    }
+  }
+
+  if (!payload.documents.manual) fail('documents', 'manual body is empty');
+  if (!payload.documents.rules) fail('documents', 'rules body is empty');
+  for (const d of payload.decisions) {
+    if (!d.title) fail('decision', 'title is empty (NOT NULL)');
+  }
+
+  return problems;
 }
 
 async function resolveUserId(client) {
@@ -375,6 +501,15 @@ async function main() {
   const client = serviceClient();
   const userId = await resolveUserId(client);
   const payload = prepareLoadPayload({ rowsData, docsData, userId, overrides });
+
+  const problems = preflight(payload);
+  if (problems.length > 0) {
+    console.error(`${problems.length} row(s) would be rejected by the schema; nothing was written:`);
+    for (const p of problems.slice(0, 40)) console.error(`  ${p}`);
+    if (problems.length > 40) console.error(`  ...and ${problems.length - 40} more`);
+    return 1;
+  }
+
   const counts = await loadDatabase(client, payload, userId);
 
   console.log(`exercises       ${counts.exercises}`);

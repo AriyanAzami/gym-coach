@@ -229,3 +229,28 @@ test('a per-hand load is still not treated as per-set', () => {
   assert.equal(out.rows.length, 1);
   assert.equal(out.review.length, 0);
 });
+
+/* Some skipped exercises are logged as "0" sets rather than an em-dash. Zero
+   sets performed is a skipped exercise; letting a 0 through produced a
+   target_sets of 0, which the schema's "target_sets > 0" check rejects, and
+   one such row aborted a 780-row load. */
+test('zero sets means the exercise was skipped', () => {
+  const out = parseGymLogBody([
+    '| Exercise | Sets | Reps | Weight | Notes |',
+    '| --- | --- | --- | --- | --- |',
+    '| Sled Push | 0 | — | — | SKIPPED, gym was closed |',
+  ].join('\n'));
+  assert.equal(out.rows.length, 1);
+  assert.equal(out.rows[0].skipped, true);
+  assert.equal(out.rows[0].sets, null);
+});
+
+test('a skipped row still keeps its note and source text', () => {
+  const out = parseGymLogBody([
+    '| Exercise | Sets | Reps | Weight | Notes |',
+    '| --- | --- | --- | --- | --- |',
+    '| Sled Push | 0 | — | — | SKIPPED, gym was closed |',
+  ].join('\n'));
+  assert.match(out.rows[0].note, /gym was closed/);
+  assert.match(out.rows[0].source_text, /Sled Push/);
+});
