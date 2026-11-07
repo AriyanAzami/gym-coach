@@ -120,8 +120,10 @@ Constraints that matter:
   with the service-role key after it has verified the caller's JWT, which keeps
   the app from leaving queued jobs that no Action will ever pick up. The table
   joins the `supabase_realtime` publication so the app can watch job status.
-- A private Storage bucket, `shots`, is created for future screenshots, with an
-  owner-only policy on `storage.objects` — no public access, no anon read.
+- A private Storage bucket, `shots`, holds Apple Watch workout screenshots
+  attached to a session (paths `<user_id>/<session_id>/…`, listed in
+  `sessions.hr_zones.shots`), with an owner-only policy on `storage.objects` —
+  no public access, no anon read.
 
 `exercises.load_mode` is an addition to the brief's column list, needed because
 the brief requires per-hand dumbbell and cable loads to stay per hand. Whether a
@@ -331,18 +333,26 @@ with the service-role key: current rules and manual, the last eight weeks of
 sessions and sets, `lift_state`, `weekly_muscle_volume` against the rules
 targets, `training_rate`, `body_trend`, the current and previous block,
 recent decisions, unconsumed `coach_notes`, the job's own instructions, and —
-for `revise_block` — the draft block being revised.
+for `revise_block` — the draft block being revised. Screenshots attached to the
+three most recent sessions that have any are downloaded into `work/shots/` and
+listed as `session_screenshots`.
+
+**Job options.** The instructions may start with
+`[model=opus|sonnet effort=low|medium|high|max target=rules|manual]`, which the
+Coach screen writes for you. `model` and `effort` pick the Claude model and
+thinking effort (defaults: `opus`, `high`). `target` turns an `ask` job into a
+revision of the rules document or the manual.
 
 **The model call.** `--allowedTools` only decides what runs without a prompt; the
 tools the model *has* are set by `--tools`. Both are needed:
 
 ```bash
 claude -p "$(cat coach/prompts/$KIND.md)" \
-  --model opus \
+  --model "$MODEL" \
   --max-turns 40 \
   --tools "Read,Write,Edit,Bash" \
   --allowedTools "Read" "Write" "Edit" "Bash(node coach/validate.mjs:*)" \
-  --disallowedTools "mcp__*" \
+  --disallowedTools "mcp__*" "WebFetch" "WebSearch" \
   > work/claude.log 2>&1
 ```
 
@@ -379,6 +389,12 @@ kinds land in `output_md`. Consumed `coach_notes` get `consumed_by_job` set. The
 job becomes `done`. Any failure anywhere sets the job `failed` with a short
 error string in the row.
 
+Two optional outputs are saved on the way. For an `ask` job with a `target`,
+`work/rules.json` (re-validated against the schema) or `work/manual.md` becomes
+a new `documents` version. If the model wrote `work/session_metrics.json` after
+reading screenshots, its duration, calories, heart-rate, effort and zone values
+are written onto the matching sessions.
+
 **Prompts** in `coach/prompts/` contain no personal data. They tell the model to
 read `work/context.json`, treat the manual and rules as binding, honour the
 job's instructions and the unconsumed notes, show the volume arithmetic in the
@@ -412,10 +428,10 @@ Mobile-first, dark-mode aware, installable. Email + password sign-in only.
 | Screen | Contents |
 | :-- | :-- |
 | Today | the computed plan, start/resume, week counters, quick body log |
-| Workout | per-exercise logging, done-as-prescribed, rest timer, finish sheet |
+| Workout | per-exercise logging, done-as-prescribed, rest timer, finish sheet, Apple Watch text import and screenshot upload |
 | Block | active block, drafts with rationale and volume table, generate and revise |
 | Progress | lift charts from `lift_history`, weekly volume against target, body-weight trend |
-| Coach | notes, check-ins, ask, job history with live status |
+| Coach | notes, check-ins, ask, model and effort per job, job history with live status |
 | Settings | rules editor with schema validation and version history/rollback, manual editor, exercises list/edit, sign out |
 
 ---
@@ -461,7 +477,7 @@ Notion stays read-only until verification passes.
 **Security.** Public sign-ups are disabled in the Supabase dashboard; the one
 user is created there by hand. RLS is enabled on every table with
 `user_id = auth.uid()` for every operation, and every view is
-`security_invoker = true`. The Storage bucket reserved for future screenshots is
+`security_invoker = true`. The `shots` Storage bucket for workout screenshots is
 private with an owner-only RLS policy. A test signs in with no session at all
 and asserts that every table and view returns zero rows and refuses every write.
 The edge function rejects any request whose JWT does not resolve to an existing

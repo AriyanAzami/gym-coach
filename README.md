@@ -48,8 +48,13 @@ Three tiers, by what they cost:
   exercise, your last logged numbers beside each one, and the rest time.
 - **Workout.** Log a set in one tap ("done as prescribed"), or edit weight,
   reps and partials per set. It has a rest timer and a finish sheet for
-  duration, heart rate, effort and pain. Logging works offline and syncs when
-  the connection comes back.
+  duration, calories, heart rate, HR zones, effort and pain. Logging works
+  offline and syncs when the connection comes back.
+- **Apple Watch import.** Paste the text of an Apple Fitness workout summary,
+  for example from iOS Live Text, and the finish sheet fills itself in. You can
+  also open the app from an iOS Shortcut with `?watch=<text>` in the URL. Or
+  attach the screenshots themselves: they go to a private storage bucket, and
+  the coach reads them later (see [below](#4-an-ai-job-from-start-to-finish)).
 - **Block.** Shows the active training block. Drafts come with the coach's
   rationale and a weekly-volume table. You can Activate, Request changes or
   Discard each draft.
@@ -156,7 +161,9 @@ The steps:
   writes `work/context.json`. That file holds the rules and the manual, eight
   weeks of sessions and sets, lift state, volume measured against your targets,
   your training rate, body trend, current and previous blocks, recent
-  decisions and any unread coach notes.
+  decisions and any unread coach notes. If your three most recent sessions
+  with screenshots attached have any, those images are downloaded into
+  `work/` as well.
 - **`claude -p`** runs with a prompt from [`coach/prompts/`](coach/prompts).
   The model has Read, Write, Edit and exactly one shell command, the validator.
   MCP and web tools are switched off. It writes its output and runs the
@@ -170,7 +177,9 @@ The steps:
 - **[`coach/save.mjs`](coach/save.mjs)** runs every check again and ignores the
   model's claim that it passed. It then stores the block as a **draft**, along
   with its rationale and a decision-log entry, and marks the job `done`. You
-  press Activate.
+  press Activate. If a check-in has read workout stats off attached
+  screenshots, `save.mjs` also writes those numbers onto the matching
+  sessions.
 
 If anything fails, the job is marked `failed` and a short reason is written to
 the `ai_jobs` row, never to the log.
@@ -184,6 +193,9 @@ The repository is public. The data is not.
 - **Row-level security on every table**, with `user_id = auth.uid()` for every
   operation. Every view is `security_invoker`, so it follows the same rules. A
   test confirms that an anonymous client reads nothing and can write nothing.
+- **Screenshots are private.** Watch screenshots go to the `shots` storage
+  bucket. It has no public access, and an owner-only policy covers every
+  object.
 - **The anon key in [`app/js/config.js`](app/js/config.js) is public.** Like a
   Firebase web config, it identifies the project but grants nothing without a
   signed-in session.
@@ -342,7 +354,7 @@ point to adapt if your history lives somewhere else.
 
 ```bash
 npm install
-npm test                                        # node --test, ~550 tests, no framework
+npm test                                        # node --test, no framework
 npm run validate:rules -- path/to/rules.json    # check a rules document against the schema
 python -m http.server 5173 --directory app      # serve the app locally
 ```
