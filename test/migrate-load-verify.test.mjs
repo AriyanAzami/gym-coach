@@ -291,3 +291,44 @@ test('buildVerifyReport flags a weight or date mismatch between Notion and lift_
   assert.equal(report.mismatches.length, 1);
   assert.match(report.mismatches[0].exercise, /Bench Press/);
 });
+
+/* Notion records session duration as a float (48.68 minutes); sessions.duration_min
+   is an integer column, and Postgres rejects the float outright rather than
+   coercing it. The live load died on this after 23 of 52 sessions. Rounding to
+   the nearest minute loses under a minute and matches what the column means. */
+test('a fractional session duration is rounded to fit the integer column', () => {
+  const payload = prepareLoadPayload({
+    rowsData: {
+      exercises: [],
+      sessions: [{ notion_page_id: 'p1', date: '2026-09-01', kind: 'training', status: 'done', duration_min: 48.68, exercises: [] }],
+      body_metrics: [],
+      block: null,
+    },
+    docsData: { manual: 'm', rules: exampleRules, decisions: [] },
+    userId: 'u1',
+  });
+  assert.equal(payload.sessions[0].row.duration_min, 49);
+  assert.ok(Number.isInteger(payload.sessions[0].row.duration_min));
+});
+
+test('every integer column in a session row receives an integer or null', () => {
+  const payload = prepareLoadPayload({
+    rowsData: {
+      exercises: [],
+      sessions: [{
+        notion_page_id: 'p1', date: '2026-09-01', kind: 'training', status: 'done',
+        duration_min: 51.72, calories: 430, avg_hr: 118, peak_hr: 151, effort_1_10: 7,
+        exercises: [],
+      }],
+      body_metrics: [],
+      block: null,
+    },
+    docsData: { manual: 'm', rules: exampleRules, decisions: [] },
+    userId: 'u1',
+  });
+  const row = payload.sessions[0].row;
+  for (const col of ['duration_min', 'calories', 'avg_hr', 'peak_hr', 'effort_1_10', 'day_index']) {
+    const v = row[col];
+    assert.ok(v === null || Number.isInteger(v), `${col} is ${v}, which Postgres would reject`);
+  }
+});

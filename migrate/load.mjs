@@ -22,6 +22,9 @@ import { serviceClient, rows } from '../coach/lib/db.mjs';
 const OUT = 'migrate/out';
 const norm = (s) => String(s ?? '').trim().toLowerCase();
 
+/* For columns the schema declares as integer. */
+const asInt = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null);
+
 /* Pure transformation from migrate/out/{rows,documents}.json into DB-ready
    structures. Exported so tests can verify the mapping without a database. */
 export function prepareLoadPayload({ rowsData, docsData, userId, overrides = {} }) {
@@ -112,11 +115,15 @@ export function prepareLoadPayload({ rowsData, docsData, userId, overrides = {} 
         day_index: s.day_index ?? null,
         kind: s.kind ?? 'training',
         status: s.status ?? 'done',
-        duration_min: s.duration_min ?? null,
-        calories: s.calories ?? null,
-        avg_hr: s.avg_hr ?? null,
-        peak_hr: s.peak_hr ?? null,
-        effort_1_10: s.effort_1_10 ?? null,
+        // Notion records these as floats (a 48.68 minute session); the columns
+        // are integers and Postgres rejects a float outright rather than
+        // coercing it. Rounding to the nearest minute, calorie or beat loses
+        // nothing a training log cares about.
+        duration_min: asInt(s.duration_min),
+        calories: asInt(s.calories),
+        avg_hr: asInt(s.avg_hr),
+        peak_hr: asInt(s.peak_hr),
+        effort_1_10: asInt(s.effort_1_10),
         hr_zones: s.hr_zones ?? null,
         pain: s.pain ?? 'none',
         notes: s.notes ?? null,
