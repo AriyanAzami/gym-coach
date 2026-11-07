@@ -243,6 +243,18 @@ async function logPrescribed(sessionExercises) {
 
 let pendingShotPaths = [];
 
+/* Screenshots attached on an earlier save are kept, so re-saving the sheet
+   never detaches them. */
+export function hrZonesPayload(zonesText, existing, pendingShots) {
+  const raw = String(zonesText ?? '').trim();
+  const shots = [...new Set([...(existing?.shots ?? []), ...(pendingShots ?? [])])];
+  if (raw === '' && shots.length === 0) return null;
+  return {
+    ...(raw !== '' ? { raw } : {}),
+    ...(shots.length > 0 ? { shots } : {}),
+  };
+}
+
 export function applyParsedWatch(parsed) {
   let filled = 0;
   const setIf = (id, val) => {
@@ -367,8 +379,6 @@ export const actions = {
       statusNode.textContent = `Uploading ${files.length} screenshot${files.length === 1 ? '' : 's'}…`;
     }
 
-    // Also try parseAppleWatchText if clipboard has OCR text or filename hints,
-    // and upload to the private 'shots' bucket so the coach job can read the image.
     const sessionId = store.state.sessionDetail?.session?.id;
     try {
       const paths = await store.uploadSessionShots(sessionId, files);
@@ -391,13 +401,6 @@ export const actions = {
       const v = el(`f-${id}`).value;
       return v === '' ? null : Number(v);
     };
-    const zones = el('f-hr_zones').value.trim();
-    const hrZonesPayload = (zones === '' && pendingShotPaths.length === 0)
-      ? null
-      : {
-        ...(zones !== '' ? { raw: zones } : {}),
-        ...(pendingShotPaths.length > 0 ? { shots: pendingShotPaths } : {}),
-      };
 
     await store.write({
       table: 'sessions',
@@ -410,7 +413,7 @@ export const actions = {
         avg_hr: num('avg_hr'),
         peak_hr: num('peak_hr'),
         effort_1_10: num('effort_1_10'),
-        hr_zones: hrZonesPayload,
+        hr_zones: hrZonesPayload(el('f-hr_zones').value, detail.session.hr_zones, pendingShotPaths),
         pain: el('f-pain').value.trim() || 'none',
         notes: el('f-notes').value.trim() || null,
       },

@@ -51,6 +51,58 @@ function collectRunMeta(job, context, outputChars = 0) {
   };
 }
 
+/* The ranges mirror the check constraints on `sessions`, so a value the
+   database would reject is dropped here instead of failing the whole update. */
+const METRIC_OK = {
+  duration_min: (v) => v >= 0,
+  calories: (v) => v >= 0,
+  avg_hr: (v) => v > 0,
+  peak_hr: (v) => v > 0,
+  effort_1_10: (v) => v >= 1 && v <= 10,
+};
+
+/* Pure: turns the stats the model read off workout screenshots into session
+   updates. Only sessions whose screenshots were in the context are touched, and
+   only fields the snapshot had empty, so nothing the owner typed is replaced. */
+export function sessionMetricPatches(metrics, context) {
+  const list = Array.isArray(metrics) ? metrics : [metrics];
+  const shown = new Set((context?.session_screenshots ?? []).map((s) => s.session_id));
+  const byId = new Map((context?.sessions ?? []).map((s) => [s.id, s]));
+  const out = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object' || !shown.has(item.session_id)) continue;
+    const session = byId.get(item.session_id);
+    if (!session) continue;
+    const patch = {};
+    for (const [k, ok] of Object.entries(METRIC_OK)) {
+      if (session[k] == null && Number.isInteger(item[k]) && ok(item[k])) patch[k] = item[k];
+    }
+    const zones = session.hr_zones ?? {};
+    if (!zones.raw && typeof item.hr_zones === 'string' && item.hr_zones.trim()) {
+      patch.hr_zones = { ...zones, raw: item.hr_zones.trim() };
+    }
+    if (Object.keys(patch).length > 0) out.push({ id: session.id, patch });
+  }
+  return out;
+}
+
+async function backfillSessionMetrics(client, job, context) {
+  if (!existsSync('work/session_metrics.json')) return null;
+  let metrics;
+  try {
+    metrics = JSON.parse(readFileSync('work/session_metrics.json', 'utf8'));
+  } catch {
+    return 'work/session_metrics.json was not valid JSON';
+  }
+  let failed = 0;
+  const patches = sessionMetricPatches(metrics, context);
+  for (const { id, patch } of patches) {
+    const { error } = await client.from('sessions').update(patch).eq('id', id).eq('user_id', job.user_id);
+    if (error) failed += 1;
+  }
+  return failed > 0 ? `${failed} of ${patches.length} session updates failed` : null;
+}
+
 /* Pure: turns a validated plan into the rows that will be inserted. Slots keep
    their exercise name because a new exercise has no id until it is inserted. */
 export function rowsForBlock(plan, { jobId, library }) {
@@ -219,33 +271,17 @@ async function main(jobId) {
       await saveTargetDocument(client, job, context);
     }
 
-    // If a session had attached Apple Watch screenshots and Claude wrote extracted
-    // stats to work/session_metrics.json, backfill any null fields on that session.
-    if (existsSync('work/session_metrics.json')) {
-      try {
-        const metricsList = JSON.parse(readFileSync('work/session_metrics.json', 'utf8'));
-        for (const item of Array.isArray(metricsList) ? metricsList : [metricsList]) {
-          if (!item?.session_id) continue;
-          const patch = {};
-          for (const k of ['duration_min', 'calories', 'avg_hr', 'peak_hr', 'effort_1_10']) {
-            if (Number.isInteger(item[k]) && item[k] > 0) patch[k] = item[k];
-          }
-          if (typeof item.hr_zones === 'string' && item.hr_zones.trim()) {
-            const orig = (context.sessions ?? []).find((s) => s.id === item.session_id);
-            patch.hr_zones = { ...(orig?.hr_zones ?? {}), raw: item.hr_zones.trim() };
-          }
-          if (Object.keys(patch).length > 0) {
-            await client.from('sessions').update(patch).eq('id', item.session_id).eq('user_id', job.user_id);
-          }
-        }
-      } catch {
-        // Optional backfill — never fail the main job if malformed.
-      }
-    }
-
     const result = BLOCK_KINDS.includes(job.kind)
       ? await saveBlock(client, job, context)
       : readMarkdown(job, context);
+
+    // A failed backfill should not throw away a good check-in, so it is
+    // reported inside the output, which lives behind RLS like the error column.
+    const backfillProblem = await backfillSessionMetrics(client, job, context);
+    if (backfillProblem) {
+      const note = `_Workout stats from screenshots were not fully saved: ${backfillProblem}._`;
+      result.output_md = result.output_md ? `${result.output_md}\n\n---\n${note}` : note;
+    }
 
     // Notes that went into this job are spent, whatever the job produced.
     const consumed = context.consumed_note_ids ?? [];

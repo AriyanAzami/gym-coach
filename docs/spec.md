@@ -393,7 +393,9 @@ Two optional outputs are saved on the way. For an `ask` job with a `target`,
 `work/rules.json` (re-validated against the schema) or `work/manual.md` becomes
 a new `documents` version. If the model wrote `work/session_metrics.json` after
 reading screenshots, its duration, calories, heart-rate, effort and zone values
-are written onto the matching sessions.
+fill whichever of those fields are still empty on sessions whose screenshots
+were in the context; values outside the column constraints are dropped, and a
+failed update is noted in `output_md` rather than failing the job.
 
 **Prompts** in `coach/prompts/` contain no personal data. They tell the model to
 read `work/context.json`, treat the manual and rules as binding, honour the

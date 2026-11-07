@@ -2,7 +2,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { state } from '../app/js/store.js';
-import { render, statusFor, finishSheet, setsEditor } from '../app/js/screens-workout.js';
+import { render, statusFor, finishSheet, setsEditor, hrZonesPayload } from '../app/js/screens-workout.js';
 import { parseAppleWatchText } from '../app/js/engine.js';
 import rulesExample from '../supabase/seed/rules.example.json' with { type: 'json' };
 
@@ -223,4 +223,22 @@ test('the set editor offers adding a set beyond the target count', () => {
   const html = setsEditor('sx-1');
   assert.match(html, /data-action="add-set"/);
   assert.match(html, /data-count="3"/);
+});
+
+test('hr zones payload is null when there is nothing to store', () => {
+  assert.equal(hrZonesPayload('', null, []), null);
+  assert.equal(hrZonesPayload('  ', {}, []), null);
+});
+
+test('hr zones payload keeps zone text and new screenshots', () => {
+  assert.deepEqual(hrZonesPayload('z2:12', null, ['u/se-1/a.png']), { raw: 'z2:12', shots: ['u/se-1/a.png'] });
+});
+
+test('saving the finish sheet again keeps screenshots attached earlier', () => {
+  const existing = { raw: 'z2:12', shots: ['u/se-1/a.png'] };
+  assert.deepEqual(hrZonesPayload('', existing, []), { shots: ['u/se-1/a.png'] });
+  assert.deepEqual(
+    hrZonesPayload('z3:4', existing, ['u/se-1/b.png', 'u/se-1/a.png']),
+    { raw: 'z3:4', shots: ['u/se-1/a.png', 'u/se-1/b.png'] },
+  );
 });

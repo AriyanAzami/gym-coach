@@ -178,8 +178,8 @@ The steps:
   model's claim that it passed. It then stores the block as a **draft**, along
   with its rationale and a decision-log entry, and marks the job `done`. You
   press Activate. If a check-in has read workout stats off attached
-  screenshots, `save.mjs` also writes those numbers onto the matching
-  sessions.
+  screenshots, `save.mjs` copies them into any of those sessions' fields
+  you left empty. It never overwrites a number you typed.
 
 If anything fails, the job is marked `failed` and a short reason is written to
 the `ai_jobs` row, never to the log.
