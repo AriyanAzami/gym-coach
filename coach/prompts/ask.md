@@ -12,6 +12,9 @@ their blocks, their recent decisions and the notes they have left you.
   explain what the rules currently require.
 - Unconsumed `coach_notes` are context for the question; mention one only if it
   bears on the answer.
+- If `session_screenshots` is present in `work/context.json`, read those image files
+  (Apple Watch / Fitness workout screenshots) whenever session heart rate, effort,
+  calories, or duration are relevant.
 
 ## What to write
 

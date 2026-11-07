@@ -11,6 +11,12 @@ notes they have left you, and the instructions for this job.
   their prose, not against general training advice.
 - `job.instructions`, when present, says what they want the check-in to focus on.
 - Unconsumed `coach_notes` are things they have raised. Address them.
+- If `session_screenshots` is present in `work/context.json`, read those image files
+  (Apple Watch / Fitness workout screenshots) to inspect duration, calories, heart rate,
+  effort, and HR zones for any session where those fields were not manually entered, and
+  write the extracted numbers to `work/session_metrics.json` as an array of
+  `{ "session_id": "...", "duration_min": 40, "calories": 350, "avg_hr": 125, "peak_hr": 170, "effort_1_10": 8, "hr_zones": "z1:25 z2:6 z3:3" }`
+  so the database row is automatically backfilled.
 
 ## What to write
 

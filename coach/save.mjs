@@ -219,6 +219,30 @@ async function main(jobId) {
       await saveTargetDocument(client, job, context);
     }
 
+    // If a session had attached Apple Watch screenshots and Claude wrote extracted
+    // stats to work/session_metrics.json, backfill any null fields on that session.
+    if (existsSync('work/session_metrics.json')) {
+      try {
+        const metricsList = JSON.parse(readFileSync('work/session_metrics.json', 'utf8'));
+        for (const item of Array.isArray(metricsList) ? metricsList : [metricsList]) {
+          if (!item?.session_id) continue;
+          const patch = {};
+          for (const k of ['duration_min', 'calories', 'avg_hr', 'peak_hr', 'effort_1_10']) {
+            if (Number.isInteger(item[k]) && item[k] > 0) patch[k] = item[k];
+          }
+          if (typeof item.hr_zones === 'string' && item.hr_zones.trim()) {
+            const orig = (context.sessions ?? []).find((s) => s.id === item.session_id);
+            patch.hr_zones = { ...(orig?.hr_zones ?? {}), raw: item.hr_zones.trim() };
+          }
+          if (Object.keys(patch).length > 0) {
+            await client.from('sessions').update(patch).eq('id', item.session_id).eq('user_id', job.user_id);
+          }
+        }
+      } catch {
+        // Optional backfill — never fail the main job if malformed.
+      }
+    }
+
     const result = BLOCK_KINDS.includes(job.kind)
       ? await saveBlock(client, job, context)
       : readMarkdown(job, context);

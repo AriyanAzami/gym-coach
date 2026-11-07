@@ -5,7 +5,7 @@
 import * as store from './store.js';
 import { h, fmtLoad, fmtRest, toast, sheet, closeSheet, timer, el, q } from './ui.js';
 import { nav } from './nav.js';
-import { sessionComplete, ymd } from './engine.js';
+import { sessionComplete, ymd, parseAppleWatchText } from './engine.js';
 
 const nameOf = (id) => store.state.exercises.find((e) => e.id === id)?.name ?? 'Unknown exercise';
 const exerciseOf = (id) => store.state.exercises.find((e) => e.id === id) ?? null;
@@ -103,19 +103,62 @@ export function render(params = {}) {
 
 /* Every field is optional except pain, which defaults to none so the owner is
    never forced to answer a question they have no answer to. */
-export function finishSheet(session) {
+export function finishSheet(session, prefill = {}) {
+  let defaultDuration = prefill.duration_min ?? session?.duration_min ?? '';
+  if (defaultDuration === '' && session?.created_at) {
+    const elapsedMin = Math.round((Date.now() - Date.parse(session.created_at)) / 60000);
+    if (Number.isFinite(elapsedMin) && elapsedMin > 0 && elapsedMin <= 240) {
+      defaultDuration = elapsedMin;
+    }
+  }
+  const cal = prefill.calories ?? session?.calories ?? '';
+  const avgHr = prefill.avg_hr ?? session?.avg_hr ?? '';
+  const peakHr = prefill.peak_hr ?? session?.peak_hr ?? '';
+  const effort = prefill.effort_1_10 ?? session?.effort_1_10 ?? '';
+  const zones = prefill.hr_zones ?? session?.hr_zones?.raw ?? '';
+  const pain = prefill.pain ?? session?.pain ?? 'none';
+  const notes = prefill.notes ?? session?.notes ?? '';
+
   return `<h2>Finish session</h2>
     <p class="small muted">All optional except pain, which defaults to none.</p>
-    <div class="grid2">
-      <label>Duration (min)<input id="f-duration_min" class="num" type="number" inputmode="numeric" min="0"></label>
-      <label>Calories<input id="f-calories" class="num" type="number" inputmode="numeric" min="0"></label>
-      <label>Average HR<input id="f-avg_hr" class="num" type="number" inputmode="numeric" min="0"></label>
-      <label>Peak HR<input id="f-peak_hr" class="num" type="number" inputmode="numeric" min="0"></label>
-      <label>Effort 1-10<input id="f-effort_1_10" class="num" type="number" inputmode="numeric" min="1" max="10"></label>
-      <label>HR zones<input id="f-hr_zones" type="text" placeholder="z2:12 z3:20"></label>
+
+    <div class="watch-box" style="margin-bottom:12px;padding:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm)">
+      <div class="card-title" style="margin-bottom:8px">
+        <div>
+          <div class="eyebrow" style="margin:0">Apple Watch / Fitness</div>
+          <div class="small muted">Auto-fill from screenshot, iOS Shortcut, or Live Text</div>
+        </div>
+      </div>
+      <div class="grid2" style="margin-bottom:8px">
+        <label class="btn sm primary" style="margin:0;cursor:pointer">
+          <input id="f-shots" type="file" accept="image/*" multiple data-action="upload-watch-shots" style="display:none">
+          Upload screenshot(s)
+        </label>
+        <button class="btn sm" type="button" data-action="paste-watch">Paste Watch text</button>
+      </div>
+      <details>
+        <summary class="small muted">Scan / paste screenshot text or setup iOS Shortcut</summary>
+        <label style="margin-top:8px">Tap inside box &rarr; Scan Text (or paste OCR text)
+          <textarea id="f-watch-raw" rows="2" data-action="parse-watch-input" placeholder="Paste Apple Fitness screenshot text here to auto-fill all fields…"></textarea>
+        </label>
+        <div class="small muted" style="line-height:1.45">
+          <b>1-Tap iOS Shortcut:</b> In Apple Shortcuts, add <i>Find Health Samples (Workouts, limit 1)</i> or <i>Extract Text from Image</i> (Share Sheet), then open:<br>
+          <code>${h((globalThis.location?.origin ?? '') + (globalThis.location?.pathname ?? '/'))}?watch=TEXT</code>
+        </div>
+      </details>
+      <div id="f-shots-status" class="small muted" style="margin-top:6px;display:none"></div>
     </div>
-    <label>Pain<input id="f-pain" type="text" value="none"></label>
-    <label>Notes<textarea id="f-notes" rows="3"></textarea></label>
+
+    <div class="grid2">
+      <label>Duration (min)<input id="f-duration_min" class="num" type="number" inputmode="numeric" min="0" value="${h(defaultDuration)}"></label>
+      <label>Calories<input id="f-calories" class="num" type="number" inputmode="numeric" min="0" value="${h(cal)}"></label>
+      <label>Average HR<input id="f-avg_hr" class="num" type="number" inputmode="numeric" min="0" value="${h(avgHr)}"></label>
+      <label>Peak HR<input id="f-peak_hr" class="num" type="number" inputmode="numeric" min="0" value="${h(peakHr)}"></label>
+      <label>Effort 1-10<input id="f-effort_1_10" class="num" type="number" inputmode="numeric" min="1" max="10" value="${h(effort)}"></label>
+      <label>HR zones<input id="f-hr_zones" type="text" placeholder="z2:12 z3:20" value="${h(zones)}"></label>
+    </div>
+    <label>Pain<input id="f-pain" type="text" value="${h(pain)}"></label>
+    <label>Notes<textarea id="f-notes" rows="3">${h(notes)}</textarea></label>
     <div class="grid2">
       <button class="btn ghost" data-sheet="cancel">Back</button>
       <button class="btn primary" data-action="save-finish">Save</button>
@@ -198,6 +241,27 @@ async function logPrescribed(sessionExercises) {
   toast(`${rows.length} sets logged`);
 }
 
+let pendingShotPaths = [];
+
+export function applyParsedWatch(parsed) {
+  let filled = 0;
+  const setIf = (id, val) => {
+    if (val === null || val === undefined || val === '') return;
+    const node = el(`f-${id}`);
+    if (node) {
+      node.value = String(val);
+      filled += 1;
+    }
+  };
+  setIf('duration_min', parsed.duration_min);
+  setIf('calories', parsed.calories);
+  setIf('avg_hr', parsed.avg_hr);
+  setIf('peak_hr', parsed.peak_hr);
+  setIf('effort_1_10', parsed.effort_1_10);
+  setIf('hr_zones', parsed.hr_zones);
+  return filled;
+}
+
 export const actions = {
   'done-all': async () => logPrescribed(store.state.sessionDetail.exercises),
 
@@ -260,7 +324,66 @@ export const actions = {
     toast('Sets saved');
   },
 
-  'finish-session': () => sheet(finishSheet(store.state.sessionDetail.session)),
+  'finish-session': () => {
+    pendingShotPaths = [];
+    sheet(finishSheet(store.state.sessionDetail.session));
+  },
+
+  'paste-watch': async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text?.trim()) {
+        toast('Clipboard is empty', 'bad');
+        return;
+      }
+      const rawBox = el('f-watch-raw');
+      if (rawBox) rawBox.value = text;
+      const count = applyParsedWatch(parseAppleWatchText(text));
+      toast(count > 0 ? `Auto-filled ${count} Apple Watch field${count === 1 ? '' : 's'}` : 'No Apple Watch stats found in clipboard', count > 0 ? undefined : 'bad');
+    } catch {
+      const rawBox = el('f-watch-raw');
+      if (rawBox) {
+        rawBox.closest('details')?.setAttribute('open', '');
+        rawBox.focus();
+      }
+      toast('Paste into the Apple Watch box below');
+    }
+  },
+
+  'parse-watch-input': (node) => {
+    const parsed = parseAppleWatchText(node.value);
+    const count = applyParsedWatch(parsed);
+    if (count > 0) {
+      toast(`Auto-filled ${count} field${count === 1 ? '' : 's'}`);
+    }
+  },
+
+  'upload-watch-shots': async (node) => {
+    const files = Array.from(node.files ?? []);
+    if (files.length === 0) return;
+    const statusNode = el('f-shots-status');
+    if (statusNode) {
+      statusNode.style.display = 'block';
+      statusNode.textContent = `Uploading ${files.length} screenshot${files.length === 1 ? '' : 's'}…`;
+    }
+
+    // Also try parseAppleWatchText if clipboard has OCR text or filename hints,
+    // and upload to the private 'shots' bucket so the coach job can read the image.
+    const sessionId = store.state.sessionDetail?.session?.id;
+    try {
+      const paths = await store.uploadSessionShots(sessionId, files);
+      pendingShotPaths.push(...paths);
+      if (statusNode) {
+        statusNode.textContent = `✓ ${paths.length} screenshot${paths.length === 1 ? '' : 's'} attached for Coach — tap "Paste Watch text" or Save`;
+      }
+      toast(`${paths.length} screenshot${paths.length === 1 ? '' : 's'} attached`);
+    } catch (err) {
+      if (statusNode) {
+        statusNode.textContent = `Could not upload screenshot: ${err.message ?? 'error'}`;
+      }
+      toast(err.message ?? 'Could not upload screenshot', 'bad');
+    }
+  },
 
   'save-finish': async () => {
     const detail = store.state.sessionDetail;
@@ -269,6 +392,12 @@ export const actions = {
       return v === '' ? null : Number(v);
     };
     const zones = el('f-hr_zones').value.trim();
+    const hrZonesPayload = (zones === '' && pendingShotPaths.length === 0)
+      ? null
+      : {
+        ...(zones !== '' ? { raw: zones } : {}),
+        ...(pendingShotPaths.length > 0 ? { shots: pendingShotPaths } : {}),
+      };
 
     await store.write({
       table: 'sessions',
@@ -281,12 +410,13 @@ export const actions = {
         avg_hr: num('avg_hr'),
         peak_hr: num('peak_hr'),
         effort_1_10: num('effort_1_10'),
-        hr_zones: zones === '' ? null : { raw: zones },
+        hr_zones: hrZonesPayload,
         pain: el('f-pain').value.trim() || 'none',
         notes: el('f-notes').value.trim() || null,
       },
     });
 
+    pendingShotPaths = [];
     closeSheet();
     timer.stop();
     store.state.sessionDetail = null;
@@ -297,7 +427,8 @@ export const actions = {
 };
 
 /* Pulls the session in when the screen is opened with a different one, or with
-   none loaded yet. */
+   none loaded yet. Also opens the Finish sheet pre-filled when launched from
+   an iOS Shortcut with ?watch=... or prefill params. */
 export async function mount(params = {}) {
   const today = ymd(new Date());
   const openToday = store.state.sessions.find(
@@ -305,7 +436,15 @@ export async function mount(params = {}) {
   );
   const have = store.state.sessionDetail?.session?.id;
   const want = params.sessionId ?? have ?? openToday?.id;
-  if (!want || want === have) return;
-  await store.loadSessionDetail(want);
-  nav.refresh();
+  if (want && want !== have) {
+    await store.loadSessionDetail(want);
+    nav.refresh();
+  }
+  if (params.watchPrefill && store.state.sessionDetail?.session) {
+    const prefill = params.watchPrefill;
+    delete params.watchPrefill;
+    pendingShotPaths = [];
+    sheet(finishSheet(store.state.sessionDetail.session, prefill));
+    toast('Apple Watch stats loaded');
+  }
 }

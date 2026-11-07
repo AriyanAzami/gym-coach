@@ -343,6 +343,12 @@ export function wireChrome(actions) {
     const fn = actions[node.dataset.action];
     if (fn) fn(node, event);
   });
+  document.addEventListener('input', (event) => {
+    const node = event.target.closest('textarea[data-action], input[data-action]');
+    if (!node || node.type === 'file') return;
+    const fn = actions[node.dataset.action];
+    if (fn) fn(node, event);
+  });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && el('sheet-root').classList.contains('show')) closeSheet(false);
   });

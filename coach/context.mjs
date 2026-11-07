@@ -133,7 +133,8 @@ export function buildContext(data, job) {
     sessions: data.sessions.map((s) => ({
       id: s.id, date: s.date, kind: s.kind, status: s.status,
       day_index: s.day_index, duration_min: s.duration_min,
-      effort_1_10: s.effort_1_10, pain: s.pain, notes: s.notes,
+      calories: s.calories, avg_hr: s.avg_hr, peak_hr: s.peak_hr,
+      hr_zones: s.hr_zones, effort_1_10: s.effort_1_10, pain: s.pain, notes: s.notes,
       exercises: (exercisesBySession.get(s.id) ?? []).sort((a, b) => a.position - b.position),
     })),
 
@@ -215,7 +216,34 @@ async function main(jobId) {
 
     const data = await fetchAll(client, job);
     mkdirSync('work', { recursive: true });
-    writeFileSync('work/context.json', JSON.stringify(buildContext(data, job), null, 2));
+    const ctx = buildContext(data, job);
+
+    // Download any attached Apple Watch screenshots for the latest sessions so
+    // Claude can read them directly if the numeric fields were left blank.
+    const recentWithShots = (data.sessions ?? [])
+      .filter((s) => Array.isArray(s.hr_zones?.shots) && s.hr_zones.shots.length > 0)
+      .slice(-3);
+    if (recentWithShots.length > 0) {
+      mkdirSync('work/shots', { recursive: true });
+      const bucket = client.storage.from('shots');
+      const downloaded = [];
+      for (const s of recentWithShots) {
+        for (let i = 0; i < s.hr_zones.shots.length; i += 1) {
+          const storagePath = s.hr_zones.shots[i];
+          const { data: blob, error } = await bucket.download(storagePath);
+          if (!error && blob) {
+            const ext = storagePath.split('.').pop() || 'jpg';
+            const localPath = `work/shots/${s.date}-${s.id.slice(0, 8)}-${i + 1}.${ext}`;
+            const buf = Buffer.from(await blob.arrayBuffer());
+            writeFileSync(localPath, buf);
+            downloaded.push({ session_id: s.id, date: s.date, file: localPath });
+          }
+        }
+      }
+      if (downloaded.length > 0) ctx.session_screenshots = downloaded;
+    }
+
+    writeFileSync('work/context.json', JSON.stringify(ctx, null, 2));
 
     console.log(`job ${jobId} running`);
     return 0;

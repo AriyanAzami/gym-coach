@@ -3,6 +3,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { state } from '../app/js/store.js';
 import { render, statusFor, finishSheet, setsEditor } from '../app/js/screens-workout.js';
+import { parseAppleWatchText } from '../app/js/engine.js';
 import rulesExample from '../supabase/seed/rules.example.json' with { type: 'json' };
 
 const EXERCISES = [
@@ -162,6 +163,60 @@ test('the finish sheet asks for every optional field and defaults pain to none',
 
 test('the finish sheet marks every field but pain as optional', () => {
   assert.match(finishSheet(SESSION), /optional/i);
+});
+
+test('the finish sheet offers Apple Watch screenshot upload and text paste', () => {
+  const html = finishSheet(SESSION);
+  assert.match(html, /id="f-shots"/);
+  assert.match(html, /data-action="paste-watch"/);
+  assert.match(html, /id="f-watch-raw"/);
+});
+
+test('the finish sheet pre-fills Apple Watch values when passed in', () => {
+  const html = finishSheet(SESSION, {
+    duration_min: 42,
+    calories: 380,
+    avg_hr: 128,
+    peak_hr: 172,
+    effort_1_10: 8,
+    hr_zones: 'z1:25 z2:6 z3:3',
+  });
+  assert.match(html, /id="f-duration_min"[^>]*value="42"/);
+  assert.match(html, /id="f-calories"[^>]*value="380"/);
+  assert.match(html, /id="f-avg_hr"[^>]*value="128"/);
+  assert.match(html, /id="f-peak_hr"[^>]*value="172"/);
+  assert.match(html, /id="f-effort_1_10"[^>]*value="8"/);
+  assert.match(html, /id="f-hr_zones"[^>]*value="z1:25 z2:6 z3:3"/);
+});
+
+test('parseAppleWatchText extracts all fields from Apple Fitness OCR text', () => {
+  const sampleOcr = [
+    'Traditional Strength Training',
+    'Workout Details',
+    'Workout Time 0:41:35',
+    'Active Calories 385CAL',
+    'Total Calories 455CAL',
+    'Avg. Heart Rate 132BPM',
+    'Effort ± 8 Hard',
+    'Heart Rate',
+    '176',
+    '132 BPM AVG',
+    'Zone 1 26:40 <140BPM',
+    'Zone 2 06:20 141-153BPM',
+    'Zone 3 03:15 154-166BPM',
+    'Zone 4 00:45 167-179BPM',
+    'Zone 5 00:00 180+BPM',
+    'Post-Workout Heart Rate',
+    '138',
+  ].join('\n');
+
+  const parsed = parseAppleWatchText(sampleOcr);
+  assert.equal(parsed.duration_min, 42);
+  assert.equal(parsed.calories, 385);
+  assert.equal(parsed.avg_hr, 132);
+  assert.equal(parsed.peak_hr, 176);
+  assert.equal(parsed.effort_1_10, 8);
+  assert.equal(parsed.hr_zones, 'z1:27 z2:6 z3:3 z4:1');
 });
 
 test('the set editor offers adding a set beyond the target count', () => {

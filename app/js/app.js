@@ -3,6 +3,7 @@
 import * as store from './store.js';
 import * as ui from './ui.js';
 import { nav } from './nav.js';
+import { parseAppleWatchText } from './engine.js';
 
 import * as today from './screens-today.js';
 import * as workout from './screens-workout.js';
@@ -113,6 +114,44 @@ store.on('pending', render);
 
 ui.wireChrome(actions);
 
+function consumeWatchUrlParams() {
+  try {
+    const url = new URL(globalThis.location.href);
+    const sp = url.searchParams;
+    const rawWatch = sp.get('watch');
+    const prefill = rawWatch ? parseAppleWatchText(rawWatch) : {};
+    const numParam = (k) => {
+      const v = sp.get(k);
+      return v !== null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
+    };
+    const dur = numParam('duration') ?? numParam('duration_min');
+    const cal = numParam('calories') ?? numParam('cal');
+    const avg = numParam('avg_hr') ?? numParam('hr');
+    const peak = numParam('peak_hr') ?? numParam('max_hr');
+    const eff = numParam('effort') ?? numParam('effort_1_10');
+    const zones = sp.get('zones') ?? sp.get('hr_zones');
+
+    if (dur !== null) prefill.duration_min = dur;
+    if (cal !== null) prefill.calories = cal;
+    if (avg !== null) prefill.avg_hr = avg;
+    if (peak !== null) prefill.peak_hr = peak;
+    if (eff !== null) prefill.effort_1_10 = eff;
+    if (zones) prefill.hr_zones = zones;
+
+    const hasAny = Object.values(prefill).some((v) => v !== null && v !== undefined && v !== '');
+    if (!hasAny) return null;
+
+    for (const k of ['watch', 'duration', 'duration_min', 'calories', 'cal', 'avg_hr', 'hr', 'peak_hr', 'max_hr', 'effort', 'effort_1_10', 'zones', 'hr_zones']) {
+      sp.delete(k);
+    }
+    const cleanUrl = url.pathname + (sp.toString() ? `?${sp.toString()}` : '') + url.hash;
+    globalThis.history?.replaceState?.(null, '', cleanUrl);
+    return prefill;
+  } catch {
+    return null;
+  }
+}
+
 store.onAuth(async (user) => {
   if (!user) {
     store.state.loaded = false;
@@ -123,6 +162,10 @@ store.onAuth(async (user) => {
   try {
     await store.load();
     await store.flushOutbox();
+    const watchPrefill = consumeWatchUrlParams();
+    if (watchPrefill) {
+      nav.go('workout', { watchPrefill });
+    }
     store.subscribeJobs(() => {
       if (current === 'coach' || current === 'block') render();
     });
