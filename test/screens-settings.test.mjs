@@ -89,6 +89,13 @@ test('the signed-in account is shown', () => {
   assert.match(render({}), /owner@example\.invalid/);
 });
 
+test('the appearance card offers system, dark and light themes', () => {
+  const html = render({});
+  assert.match(html, /data-action="set-theme" data-theme="auto"/);
+  assert.match(html, /data-action="set-theme" data-theme="dark"/);
+  assert.match(html, /data-action="set-theme" data-theme="light"/);
+});
+
 test('with no rules document the editor offers the example to start from', () => {
   reset({ rules: null, rulesVersion: null, documents: [] });
   const html = render({});

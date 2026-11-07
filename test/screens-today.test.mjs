@@ -102,7 +102,9 @@ test('the weekly volume shortfall is summarised', () => {
 });
 
 test('the last body weight is shown with its unit', () => {
-  assert.match(render(), /70 kg/);
+  const html = render();
+  assert.match(html, /70 kg/);
+  assert.match(html, /data-action="log-weight"/);
 });
 
 test('no active block explains itself and offers the fix', () => {

@@ -89,13 +89,19 @@ export async function signIn(email, password) {
 export const signOut = () => client().auth.signOut();
 
 export function onAuth(callback) {
-  client().auth.getSession().then(({ data }) => {
-    state.user = data.session?.user ?? null;
+  let lastUserId;
+  const notify = (user) => {
+    state.user = user;
+    const id = user?.id ?? null;
+    if (id === lastUserId) return;
+    lastUserId = id;
     callback(state.user);
+  };
+  client().auth.getSession().then(({ data }) => {
+    notify(data.session?.user ?? null);
   });
   client().auth.onAuthStateChange((_event, session) => {
-    state.user = session?.user ?? null;
-    callback(state.user);
+    notify(session?.user ?? null);
   });
 }
 
@@ -154,6 +160,8 @@ export async function load() {
     notes,
     decisions,
     bodyMetrics,
+    blockDetails: {},
+    liftHistory: {},
     loaded: true,
   });
 
@@ -257,13 +265,23 @@ export async function write(op) {
   return null;
 }
 
+let flushing = null;
+
 export async function flushOutbox() {
   if (!state.online || outbox.size() === 0) return { sent: 0, dropped: 0, kept: 0 };
-  const result = await outbox.flush(send);
-  state.pendingWrites = outbox.size();
-  emit('pending');
-  if (result.sent > 0) await load();
-  return result;
+  if (flushing) return flushing;
+  flushing = (async () => {
+    try {
+      const result = await outbox.flush(send);
+      state.pendingWrites = outbox.size();
+      emit('pending');
+      if (result.sent > 0) await load();
+      return result;
+    } finally {
+      flushing = null;
+    }
+  })();
+  return flushing;
 }
 
 export const pendingWrites = () => outbox.size();
@@ -307,16 +325,28 @@ export async function dispatchJob(kind, instructions, targetBlockId = null) {
   return body;
 }
 
+let jobsChannel = null;
+
 export function subscribeJobs(callback) {
-  return client().channel('ai_jobs')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'ai_jobs' }, (payload) => {
+  if (jobsChannel) {
+    client().removeChannel(jobsChannel).catch(() => {});
+    jobsChannel = null;
+  }
+  jobsChannel = client().channel('ai_jobs')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'ai_jobs' }, async (payload) => {
       const row = payload.new ?? payload.old;
       if (!row) return;
       const i = state.jobs.findIndex((j) => j.id === row.id);
+      const prevStatus = i >= 0 ? state.jobs[i].status : null;
       if (payload.eventType === 'DELETE') state.jobs = state.jobs.filter((j) => j.id !== row.id);
       else if (i >= 0) state.jobs[i] = row;
       else state.jobs.unshift(row);
+
+      if (row.status === 'done' && prevStatus !== 'done') {
+        await load().catch(() => {});
+      }
       callback(row);
     })
     .subscribe();
+  return jobsChannel;
 }

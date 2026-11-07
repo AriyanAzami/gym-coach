@@ -98,7 +98,7 @@ function bodyCard() {
   const trend = [...store.state.bodyTrend]
     .sort((a, b) => String(a.week_start).localeCompare(String(b.week_start)));
   if (trend.length === 0) {
-    return `<div class="card"><div class="card-title"><h3>Body weight</h3></div>
+    return `<div class="card"><div class="card-title"><h3>Body weight</h3><button class="btn sm" data-action="log-weight">Log weight</button></div>
       <p class="muted small">No weigh-ins yet.</p></div>`;
   }
 
@@ -124,6 +124,7 @@ function bodyCard() {
       inBand === null ? '' : inBand ? ' · <span class="pill must">in band</span>' : ' · <span class="pill flag">outside band</span>'}`;
 
   return `<div class="card">
+    <div class="card-title"><h3>Body weight</h3><button class="btn sm" data-action="log-weight">Log weight</button></div>
     ${chart}
     <div class="small" style="margin-top:8px">${rateLine}</div>
   </div>`;

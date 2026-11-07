@@ -123,7 +123,41 @@ export const timer = {
   },
 };
 
+const THEME_KEY = 'gym-coach.theme';
+
+export function getTheme() {
+  try {
+    const v = globalThis.localStorage?.getItem(THEME_KEY);
+    return v === 'light' || v === 'dark' ? v : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+export function setTheme(mode) {
+  const next = mode === 'light' || mode === 'dark' ? mode : 'auto';
+  try {
+    if (next === 'auto') globalThis.localStorage?.removeItem(THEME_KEY);
+    else globalThis.localStorage?.setItem(THEME_KEY, next);
+  } catch {
+    // Storage unavailable in private mode or test runner.
+  }
+  const root = globalThis.document?.documentElement;
+  if (!root) return next;
+  if (next === 'auto') delete root.dataset.theme;
+  else root.dataset.theme = next;
+
+  const meta = globalThis.document?.querySelector('meta[name="theme-color"]');
+  if (meta) {
+    const prefersLight = globalThis.matchMedia?.('(prefers-color-scheme: light)')?.matches;
+    const isLight = next === 'light' || (next === 'auto' && prefersLight);
+    meta.setAttribute('content', isLight ? '#f6f7f9' : '#101214');
+  }
+  return next;
+}
+
 export function wireChrome(actions) {
+  setTheme(getTheme());
   document.addEventListener('click', (event) => {
     const sheetBtn = event.target.closest('[data-sheet]');
     if (sheetBtn) {
@@ -131,9 +165,15 @@ export function wireChrome(actions) {
       return;
     }
     const node = event.target.closest('[data-action]');
-    if (!node) return;
+    if (!node || node.tagName === 'SELECT' || node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') return;
     const fn = actions[node.dataset.action];
     if (fn) { event.preventDefault(); fn(node, event); }
+  });
+  document.addEventListener('change', (event) => {
+    const node = event.target.closest('[data-action]');
+    if (!node) return;
+    const fn = actions[node.dataset.action];
+    if (fn) fn(node, event);
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && el('sheet-root').classList.contains('show')) closeSheet(false);

@@ -8,8 +8,11 @@
 import { deflateSync } from 'node:zlib';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
-const BG = [0x10, 0x12, 0x14];
+const BG_TOP = [0x1a, 0x20, 0x26];
+const BG_BOT = [0x0d, 0x10, 0x13];
 const FG = [0x42, 0xab, 0x7f];
+const FG_HI = [0x68, 0xc9, 0x9f];
+const BAR = [0xd8, 0xe2, 0xeb];
 
 function crc32(buf) {
   let c;
@@ -59,7 +62,22 @@ function png(size, pixel) {
   ]);
 }
 
-/* A barbell: a bar across the middle with a sleeve and a plate at each end.
+function sdRoundBox(px, py, hw, hh, r) {
+  const qx = Math.abs(px) - hw + r;
+  const qy = Math.abs(py) - hh + r;
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+}
+
+function mix(a, b, t) {
+  const k = Math.max(0, Math.min(1, t));
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * k),
+    Math.round(a[1] + (b[1] - a[1]) * k),
+    Math.round(a[2] + (b[2] - a[2]) * k),
+  ];
+}
+
+/* Anti-aliased rounded barbell over a dark radial-glow surface.
    `inset` leaves the safe-area margin a maskable icon needs. */
 function barbell(inset) {
   return (x, y, size) => {
@@ -67,16 +85,41 @@ function barbell(inset) {
     const cx = size / 2;
     const cy = size / 2;
     const scale = 1 - inset * 2;
-    const px = (x - cx) / scale + cx;
-    const py = (y - cy) / scale + cy;
+    const px = (x + 0.5 - cx) / scale;
+    const py = (y + 0.5 - cy) / scale;
+    const ax = Math.abs(px);
 
-    const onBar = Math.abs(py - cy) <= 4 * u && Math.abs(px - cx) <= 34 * u;
-    const sleeve = Math.abs(py - cy) <= 9 * u
-      && Math.abs(Math.abs(px - cx) - 27 * u) <= 4 * u;
-    const plate = Math.abs(py - cy) <= 22 * u
-      && Math.abs(Math.abs(px - cx) - 36 * u) <= 6 * u;
+    const vGrad = y / Math.max(1, size - 1);
+    const rad = Math.hypot(x - cx, y - cy) / (size * 0.65);
+    const glow = Math.max(0, 1 - rad);
+    const bgBase = mix(BG_TOP, BG_BOT, vGrad);
+    const bg = mix(bgBase, FG, glow * glow * 0.14);
 
-    return onBar || sleeve || plate ? [...FG, 255] : [...BG, 255];
+    // Center bar + end caps
+    const dBar = sdRoundBox(px, py, 39 * u, 3.2 * u, 1.6 * u);
+    // Inner large plates
+    const dInner = sdRoundBox(ax - 23.5 * u, py, 4.6 * u, 21 * u, 2.4 * u);
+    // Outer medium plates
+    const dOuter = sdRoundBox(ax - 32.2 * u, py, 4.0 * u, 14.5 * u, 2.1 * u);
+    // Inner collar stop
+    const dCollar = sdRoundBox(ax - 16.8 * u, py, 1.5 * u, 6.2 * u, 1.0 * u);
+
+    const dPlates = Math.min(dInner, dOuter);
+    const dMetal = Math.min(dBar, dCollar);
+
+    const aa = 0.85 / scale;
+    const metalAlpha = 1 - Math.max(0, Math.min(1, (dMetal + aa * 0.5) / aa));
+    const plateAlpha = 1 - Math.max(0, Math.min(1, (dPlates + aa * 0.5) / aa));
+
+    const shine = Math.max(0, Math.min(1, 0.5 - py / (42 * u)));
+    const metalCol = mix([0x98, 0xa4, 0xb0], BAR, shine);
+    const plateCol = mix(FG, FG_HI, shine * 0.65);
+
+    let out = bg;
+    if (metalAlpha > 0) out = mix(out, metalCol, metalAlpha);
+    if (plateAlpha > 0) out = mix(out, plateCol, plateAlpha);
+
+    return [out[0], out[1], out[2], 255];
   };
 }
 

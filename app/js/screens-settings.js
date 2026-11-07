@@ -7,7 +7,7 @@
    and that record has to stay readable. */
 
 import * as store from './store.js';
-import { h, markdown, toast, sheet, closeSheet, confirm, el } from './ui.js';
+import { h, markdown, toast, sheet, closeSheet, confirm, el, getTheme, setTheme } from './ui.js';
 import { nav } from './nav.js';
 import { validateRulesWith } from './rules-check.js';
 
@@ -121,13 +121,23 @@ export function render() {
     <div><div class="eyebrow">Your setup</div><h1>Settings</h1></div>
   </div>`;
 
+  const theme = getTheme();
+  const appearance = `<div class="card">
+    <div class="card-title"><h3>Appearance</h3><span class="small muted">Theme</span></div>
+    <div class="grid3">
+      <button class="btn sm${theme === 'auto' ? ' on' : ''}" data-action="set-theme" data-theme="auto">System</button>
+      <button class="btn sm${theme === 'dark' ? ' on' : ''}" data-action="set-theme" data-theme="dark">Dark</button>
+      <button class="btn sm${theme === 'light' ? ' on' : ''}" data-action="set-theme" data-theme="light">Light</button>
+    </div>
+  </div>`;
+
   const account = `<div class="card">
     <div class="card-title"><h3>Account</h3></div>
     <p class="small muted">${h(store.state.user?.email ?? 'not signed in')}</p>
     <button class="btn ghost full" data-action="sign-out">Sign out</button>
   </div>`;
 
-  return head + rulesCard() + manualCard() + exercisesCard() + account;
+  return head + appearance + rulesCard() + manualCard() + exercisesCard() + account;
 }
 
 /* The schema is fetched once so the editor can refuse a bad document before it
@@ -276,5 +286,10 @@ export const actions = {
   'sign-out': async () => {
     if (!await confirm('Sign out?', 'Anything still waiting to sync will be lost.', 'Sign out', true)) return;
     await store.signOut();
+  },
+
+  'set-theme': (node) => {
+    setTheme(node.dataset.theme);
+    nav.refresh();
   },
 };

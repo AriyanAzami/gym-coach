@@ -3,7 +3,7 @@
    is asked of a model. */
 
 import * as store from './store.js';
-import { h, fmtLoad, fmtDate, fmtRest, toast } from './ui.js';
+import { h, fmtLoad, fmtDate, fmtRest, toast, sheet, closeSheet, el } from './ui.js';
 import { nav } from './nav.js';
 import { planForDay, volumeVsTarget, ymd, isoWeekStart, nextDayIndex } from './engine.js';
 
@@ -102,8 +102,27 @@ function statsCard() {
   return `<div class="stat-row">
     <div class="stat"><div class="v">${trained}</div><div class="l">sessions this week</div></div>
     <div class="stat"><div class="v">${rate}</div><div class="l">per week, 4wk</div></div>
-    <div class="stat"><div class="v">${body ? fmtLoad(body.weight, body.unit) : '—'}</div><div class="l">last weigh-in</div></div>
+    <button class="stat" data-action="log-weight" title="Log body weight"><div class="v">${body ? fmtLoad(body.weight, body.unit) : '—'}</div><div class="l">last weigh-in</div></button>
   </div>`;
+}
+
+export function weightSheet() {
+  const latest = store.state.bodyMetrics[0];
+  const unit = latest?.unit ?? store.state.rules?.units?.body ?? 'kg';
+  return `<h2>Log weigh-in</h2>
+    <p class="small muted">Recorded for today (${fmtDate(ymd(new Date()))}).</p>
+    <div class="grid2">
+      <label>Weight<input id="bw-weight" class="num" type="number" inputmode="decimal" step="0.1" min="0" value="${h(latest?.weight ?? '')}"></label>
+      <label>Unit<select id="bw-unit">
+        <option value="kg"${unit === 'kg' ? ' selected' : ''}>kg</option>
+        <option value="lb"${unit === 'lb' ? ' selected' : ''}>lb</option>
+      </select></label>
+    </div>
+    <label>Notes (optional)<input id="bw-notes" type="text" placeholder="e.g. morning fasted"></label>
+    <div class="grid2">
+      <button class="btn ghost" data-sheet="cancel">Cancel</button>
+      <button class="btn primary" data-action="save-weight">Save</button>
+    </div>`;
 }
 
 export function render() {
@@ -215,4 +234,28 @@ async function startSession() {
 export const actions = {
   'start-session': startSession,
   'resume-session': (node) => nav.go('workout', { sessionId: node.dataset.id }),
+  'log-weight': () => sheet(weightSheet()),
+  'save-weight': async () => {
+    const raw = el('bw-weight')?.value ?? '';
+    const weight = Number(raw);
+    if (!raw.trim() || !Number.isFinite(weight) || weight <= 0) {
+      toast('Enter a valid weight', 'bad');
+      return;
+    }
+    const unit = el('bw-unit')?.value === 'lb' ? 'lb' : 'kg';
+    const notes = el('bw-notes')?.value.trim() || null;
+    try {
+      await store.write({
+        table: 'body_metrics',
+        action: 'insert',
+        row: { date: ymd(new Date()), weight, unit, notes },
+      });
+      closeSheet();
+      await store.load();
+      toast('Weigh-in saved');
+      nav.refresh();
+    } catch (err) {
+      toast(err.message ?? 'Could not save weigh-in', 'bad');
+    }
+  },
 };

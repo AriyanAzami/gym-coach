@@ -5,7 +5,7 @@
 import * as store from './store.js';
 import { h, fmtLoad, fmtRest, toast, sheet, closeSheet, timer, el, q } from './ui.js';
 import { nav } from './nav.js';
-import { sessionComplete } from './engine.js';
+import { sessionComplete, ymd } from './engine.js';
 
 const nameOf = (id) => store.state.exercises.find((e) => e.id === id)?.name ?? 'Unknown exercise';
 const exerciseOf = (id) => store.state.exercises.find((e) => e.id === id) ?? null;
@@ -288,6 +288,7 @@ export const actions = {
 
     closeSheet();
     timer.stop();
+    store.state.sessionDetail = null;
     await store.load();
     toast('Session finished');
     nav.go('today');
@@ -297,8 +298,12 @@ export const actions = {
 /* Pulls the session in when the screen is opened with a different one, or with
    none loaded yet. */
 export async function mount(params = {}) {
-  const want = params.sessionId;
+  const today = ymd(new Date());
+  const openToday = store.state.sessions.find(
+    (s) => s.date === today && s.kind === 'training' && (s.status === 'planned' || s.status === 'partial'),
+  );
   const have = store.state.sessionDetail?.session?.id;
+  const want = params.sessionId ?? have ?? openToday?.id;
   if (!want || want === have) return;
   await store.loadSessionDetail(want);
   nav.refresh();
