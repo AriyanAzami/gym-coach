@@ -172,21 +172,22 @@ test('prepareLoadPayload rejects invalid rules before any database write', () =>
 
 test('buildVerifyReport checks counts, compares lift_state to Notion, and prints next targets', () => {
   const report = buildVerifyReport({
-    sources: {
-      gym_log: { expected_count: 1 },
-      lift_tracker: { expected_count: 1 },
-      body_metrics: { expected_count: 1 },
-      monthly_plans: { expected_count: 1 },
-    },
+    sources: [
+      { name: 'Gym Log', expected_rows: 1, actual_rows: 1 },
+      { name: 'Lift Tracker', expected_rows: 'about 40', actual_rows: 1 },
+      { name: 'Monthly Plans', expected_rows: '1 active plus others', actual_rows: 3 },
+      { name: 'Body Metrics', expected_rows: 1, actual_rows: 1 },
+      { name: 'Coach Operating Manual', expected_rows: 'n/a (page)', actual_rows: null },
+    ],
     tracker: [
       {
         properties: {
           Exercise: 'Bench Press',
           Status: 'Active',
           'Last Weight': '135 lb',
-          'Last Reps': '3x8',
+          'Last Reps': '3x8 (Oct 1; felt strong)',
           'date:Last Date:start': '2026-10-01',
-          'Next Session Target': '135 lb — aim for 3x9',
+          'Next Target': '135 lb — aim for 3x9',
         },
       },
     ],
@@ -249,11 +250,13 @@ test('buildVerifyReport checks counts, compares lift_state to Notion, and prints
   assert.match(report.markdown, /3 × 9 @ 135 lb/);
   assert.match(report.markdown, /135 lb — aim for 3x9/);
   assert.equal(report.mismatches.length, 0);
+  assert.equal(report.countDiffs, 0);
+  assert.doesNotMatch(report.markdown, /MISMATCH/);
 });
 
 test('buildVerifyReport flags a weight or date mismatch between Notion and lift_state', () => {
   const report = buildVerifyReport({
-    sources: {},
+    sources: [],
     tracker: [
       {
         properties: {
@@ -262,7 +265,7 @@ test('buildVerifyReport flags a weight or date mismatch between Notion and lift_
           'Last Weight': '140 lb',
           'Last Reps': '3x8',
           'date:Last Date:start': '2026-10-05',
-          'Next Session Target': '140 lb',
+          'Next Target': '140 lb',
         },
       },
     ],

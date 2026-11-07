@@ -7,7 +7,7 @@
    2. For every Lift Tracker row, Notion's Last Weight, Last Reps, and Last Date
       against the database's lift_state view, listing every mismatch.
    3. Today's computed plan for the next rotation day printed beside Notion's
-      old "Next Session Target" text. */
+      old "Next Target" text. */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -30,6 +30,8 @@ function parseNotionWeight(raw) {
 function parseNotionReps(raw) {
   const text = String(raw ?? '').trim();
   if (!text) return null;
+  const nxm = text.match(/^d+s*xs*(d+)(?:s*-s*(d+))?/i);
+  if (nxm) return Number(nxm[2] ?? nxm[1]);
   const parsed = parseSets(text);
   if (parsed.ok) return parsed.rep_max;
   const m = text.match(/(\d+)/);
@@ -46,7 +48,7 @@ function fmtTarget(entry) {
 /* Pure report builder so the three checks can be unit-tested with fabricated
    inputs without touching a live database. */
 export function buildVerifyReport({
-  sources = {},
+  sources = [],
   tracker = [],
   dbCounts = {},
   exercises = [],
@@ -63,11 +65,15 @@ export function buildVerifyReport({
   lines.push('| Source | Expected (Notion) | In database | Status |');
   lines.push('| :-- | --: | --: | :-- |');
 
+  const sourceRows = (name) => {
+    const n = sources.find((x) => x.name === name)?.actual_rows;
+    return typeof n === 'number' ? n : undefined;
+  };
   const countPairs = [
-    ['Gym log (`sessions`)', sources.gym_log?.expected_count, dbCounts.sessions],
-    ['Lift tracker (`exercises` from tracker)', sources.lift_tracker?.expected_count, dbCounts.Active_or_Tracked_Exercises],
-    ['Body metrics (`body_metrics`)', sources.body_metrics?.expected_count, dbCounts.body_metrics],
-    ['Active block (`blocks`)', sources.monthly_plans ? 1 : undefined, dbCounts.blocks],
+    ['Gym log (`sessions`)', sourceRows('Gym Log'), dbCounts.sessions],
+    ['Lift tracker (rows read)', sourceRows('Lift Tracker'), dbCounts.Active_or_Tracked_Exercises],
+    ['Body metrics (`body_metrics`)', sourceRows('Body Metrics'), dbCounts.body_metrics],
+    ['Active block (`blocks`)', Array.isArray(sources) && sources.length ? 1 : undefined, dbCounts.blocks],
   ];
 
   let countDiffs = 0;
@@ -93,8 +99,8 @@ export function buildVerifyReport({
     const name = String(p.Exercise ?? '').trim();
     if (!name) continue;
     const status = String(p.Status ?? '');
-    if (p['Next Session Target']) {
-      nextTargetByName.set(norm(name), String(p['Next Session Target']).trim());
+    if (p['Next Target']) {
+      nextTargetByName.set(norm(name), String(p['Next Target']).trim());
     }
     if (status === 'Removed') continue;
 
@@ -131,8 +137,8 @@ export function buildVerifyReport({
   }
   lines.push('');
 
-  // ---- 3. Today's computed plan vs Notion's Next Session Target ----
-  lines.push('## 3. Next rotation day: computed target vs Notion `Next Session Target`', '');
+  // ---- 3. Today's computed plan vs Notion's Next Target ----
+  lines.push('## 3. Next rotation day: computed target vs Notion `Next Target`', '');
   const dayIdx = rotation?.day_index ?? nextDayIndex({ lastCompleteIndex: null, dayCount: days.length });
   const day = days.find((d) => d.day_index === dayIdx) ?? days[0] ?? null;
 
@@ -141,7 +147,7 @@ export function buildVerifyReport({
   } else {
     const plan = planForDay({ day, slots, exercises, states: liftState, rules });
     lines.push(`**Day ${day.day_index + 1}: ${day.name}** (${rotation?.reason ?? 'default'})`, '');
-    lines.push('| Exercise | Computed target (`engine.js`) | Notion `Next Session Target` |');
+    lines.push('| Exercise | Computed target (`engine.js`) | Notion `Next Target` |');
     lines.push('| :-- | :-- | :-- |');
     for (const ex of plan.exercises) {
       const oldTarget = nextTargetByName.get(norm(ex.name)) ?? '—';
@@ -162,7 +168,7 @@ async function main() {
 
   const sources = existsSync(`${OUT}/sources.local.json`)
     ? JSON.parse(readFileSync(`${OUT}/sources.local.json`, 'utf8'))
-    : {};
+    : [];
   const tracker = existsSync(`${OUT}/raw/lift_tracker.json`)
     ? JSON.parse(readFileSync(`${OUT}/raw/lift_tracker.json`, 'utf8'))
     : [];
