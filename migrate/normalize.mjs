@@ -165,6 +165,24 @@ function parseSetsCell(cell) {
 // The export escapes a literal tilde as \~ inside note cells.
 const unescapeTilde = (s) => String(s ?? '').replace(/\\~/g, '~');
 
+/* Some rows record a different load or rep count per set — "Set 1: 40 lb,
+   Set 2-3: 45 lb", or reps "8, then 10, 12". There is one weight and one rep
+   figure per row in the schema, so flattening these would store a number that
+   was never lifted on every set, and lift_state would then compute the next
+   target from it. They go to review instead.
+
+   A rep RANGE ("8-10") and a per-hand or per-side load are not per-set. */
+function perSetNotation(repsCell, weightCell) {
+  const reps = String(repsCell ?? '');
+  const weight = String(weightCell ?? '');
+  if (/\bset\s*\d/i.test(reps) || /\bset\s*\d/i.test(weight)) return true;
+  // Two or more separate loads in one cell.
+  if ((weight.match(/\d+(?:\.\d+)?\s*(?:lb|lbs|kg)\b/gi) ?? []).length > 1) return true;
+  // A comma-separated list of rep counts, as opposed to one number or a range.
+  if (/\d\s*,\s*(?:then\s*)?\d/.test(reps)) return true;
+  return false;
+}
+
 function parseTableRow(line, review) {
   // Split on pipes, dropping the empty cells the leading and trailing pipe make.
   const cells = line.split('|').slice(1, -1).map((c) => c.trim());
@@ -179,6 +197,12 @@ function parseTableRow(line, review) {
   const sets = parseSetsCell(setsCell);
   if (!sets.ok) {
     review.push(`Could not read the set count "${setsCell}" for ${exercise}: ${line.trim()}`);
+    return null;
+  }
+
+  if (perSetNotation(repsCell, weightCell)) {
+    review.push(`${exercise} records a different load or rep count per set, which the schema `
+      + `cannot hold as one row. Tell me which set to take as the working set, or split it: ${line.trim()}`);
     return null;
   }
 
@@ -198,6 +222,8 @@ function parseTableRow(line, review) {
   };
 }
 
+const PROSE_COMMENTARY = /^(?:comparison\b|off-plan\b|hr\s*\/\s*effort|not completed|not mentioned|swapped in|open items|mobility opener)/i;
+
 /* A prose line names one exercise before a colon and describes it after.
    Without a number anywhere after the colon there is nothing to import, so the
    line goes to review instead of becoming a row with null everything. */
@@ -212,15 +238,22 @@ function parseProseLine(line, review) {
   }
 
   const [, exercise, rest] = split;
-  if (!/\d/.test(rest)) {
+  if (PROSE_COMMENTARY.test(exercise.trim()) || !/\d/.test(rest)) {
     review.push(text);
     return null;
   }
 
-  const sets = parseSets(rest);
-  const load = parseLoadCell(rest);
+  // The prescription comes before an em-dash commentary clause ("6x9 @ 47 lb — up from 6x7").
+  const prescription = rest.split(/\s+—\s+/)[0];
+  if (/\.\s+[A-Z][^:.]{1,40}:\s/.test(prescription)) {
+    review.push(text);
+    return null;
+  }
 
-  if (!sets.ok && load.weight === null) {
+  const sets = parseSets(prescription);
+  const load = parseLoadCell(prescription);
+
+  if (!sets.ok && (load.weight === null || sets.reason !== 'no set notation found')) {
     review.push(text);
     return null;
   }

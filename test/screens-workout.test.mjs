@@ -2,7 +2,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { state } from '../app/js/store.js';
-import { render, statusFor, finishSheet } from '../app/js/screens-workout.js';
+import { render, statusFor, finishSheet, setsEditor } from '../app/js/screens-workout.js';
 import rulesExample from '../supabase/seed/rules.example.json' with { type: 'json' };
 
 const EXERCISES = [
@@ -162,4 +162,10 @@ test('the finish sheet asks for every optional field and defaults pain to none',
 
 test('the finish sheet marks every field but pain as optional', () => {
   assert.match(finishSheet(SESSION), /optional/i);
+});
+
+test('the set editor offers adding a set beyond the target count', () => {
+  const html = setsEditor('sx-1');
+  assert.match(html, /data-action="add-set"/);
+  assert.match(html, /data-count="3"/);
 });

@@ -228,7 +228,11 @@ function parseBlock(plan, note) {
       note('block', `Day ${current.number}: could not read this plan row: ${line}`);
       continue;
     }
-    const [exercise, setsCell, repsCell, restCell, ...noteCells] = cells;
+    // Plan cells carry inline HTML (<b>…</b>) from Notion; the exercise name
+    // has to match the Lift Tracker's plain text or the slot links to nothing.
+    const stripTags = (s) => String(s ?? '').replace(/<[^>]+>/g, '').trim();
+    const [exerciseRaw, setsCell, repsCell, restCell, ...noteCells] = cells;
+    const exercise = stripTags(exerciseRaw);
     const sets = Number((setsCell.match(/\d+/) ?? [])[0]);
     const reps = repsCell.match(/(\d+)\s*(?:[-–]\s*(\d+))?/);
     const restMatch = restCell.match(/(\d+)\s*(s|sec|min|m)\b/i);

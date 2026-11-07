@@ -158,6 +158,27 @@ const listOf = (value) => String(value ?? '')
   .map((s) => s.trim())
   .filter(Boolean);
 
+/* An omitted or non-positive increment becomes null alongside its unit, so the
+   exercises_increment_has_unit constraint holds and the rules default applies. */
+export function exerciseRowFromForm(fields) {
+  const rawInc = String(fields.increment ?? '').trim();
+  const incNum = rawInc === '' ? null : Number(rawInc);
+  const hasInc = incNum !== null && Number.isFinite(incNum) && incNum > 0;
+  return {
+    name: String(fields.name ?? '').trim(),
+    primary_muscle: String(fields.primary_muscle ?? '').trim(),
+    secondary_muscles: listOf(fields.secondary_muscles),
+    equipment: String(fields.equipment ?? '').trim(),
+    increment: hasInc ? incNum : null,
+    unit: hasInc ? fields.unit : null,
+    load_mode: fields.load_mode,
+    movement_tags: listOf(fields.movement_tags),
+    cues: String(fields.cues ?? '').trim() || null,
+    flag: String(fields.flag ?? '').trim() || null,
+    active: Boolean(fields.active),
+  };
+}
+
 export const actions = {
   'save-rules': async () => {
     let parsed;
@@ -220,19 +241,19 @@ export const actions = {
   },
 
   'save-exercise': async (node) => {
-    const row = {
-      name: el('ex-name').value.trim(),
-      primary_muscle: el('ex-primary_muscle').value.trim(),
-      secondary_muscles: listOf(el('ex-secondary_muscles').value),
-      equipment: el('ex-equipment').value.trim(),
-      increment: Number(el('ex-increment').value) || 0,
+    const row = exerciseRowFromForm({
+      name: el('ex-name').value,
+      primary_muscle: el('ex-primary_muscle').value,
+      secondary_muscles: el('ex-secondary_muscles').value,
+      equipment: el('ex-equipment').value,
+      increment: el('ex-increment').value,
       unit: el('ex-unit').value,
       load_mode: el('ex-load_mode').value,
-      movement_tags: listOf(el('ex-movement_tags').value),
-      cues: el('ex-cues').value.trim() || null,
-      flag: el('ex-flag').value.trim() || null,
+      movement_tags: el('ex-movement_tags').value,
+      cues: el('ex-cues').value,
+      flag: el('ex-flag').value,
       active: el('ex-active').checked,
-    };
+    });
 
     if (!row.name || !row.primary_muscle || !row.equipment) {
       toast('Name, muscle and equipment are required', 'bad');

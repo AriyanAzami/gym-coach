@@ -22,7 +22,7 @@
    validate: a rules document that is wrong silently changes every future
    target, so a loud failure here is much cheaper than a quiet one later. */
 
-import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { validateRules } from '../coach/lib/rules.mjs';
 
@@ -76,9 +76,12 @@ function main() {
   writeFileSync(`${OUT}/documents.json`, JSON.stringify({ manual, rules, decisions }, null, 2));
 
   if (review.length > 0) {
-    appendFileSync(`${OUT}/review.md`,
-      `\n## rules derived from the manual (${review.length})\n\n`
-      + review.map((r) => `- ${r}`).join('\n\n') + '\n');
+    const section = `\n## rules derived from the manual (${review.length})\n\n`
+      + review.map((r) => `- ${r}`).join('\n\n') + '\n';
+    const existing = existsSync(`${OUT}/review.md`)
+      ? readFileSync(`${OUT}/review.md`, 'utf8').replace(/\n## rules derived from the manual \(\d+\)[\s\S]*$/, '')
+      : '';
+    writeFileSync(`${OUT}/review.md`, existing + section);
   }
 
   console.log('rules validate      : yes');

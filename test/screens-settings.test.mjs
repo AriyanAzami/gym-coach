@@ -3,7 +3,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { state } from '../app/js/store.js';
-import { render, exerciseSheet } from '../app/js/screens-settings.js';
+import { render, exerciseSheet, exerciseRowFromForm } from '../app/js/screens-settings.js';
 
 const schema = JSON.parse(readFileSync('coach/schema/rules.schema.json', 'utf8'));
 const rules = JSON.parse(readFileSync('supabase/seed/rules.example.json', 'utf8'));
@@ -101,6 +101,42 @@ test('the exercise sheet exposes every editable field', () => {
   for (const field of ['name', 'primary_muscle', 'secondary_muscles', 'equipment', 'increment', 'unit', 'load_mode', 'movement_tags', 'cues', 'flag', 'active']) {
     assert.match(html, new RegExp(`id="ex-${field}"`), `the sheet has no ${field} field`);
   }
+});
+
+test('a blank exercise increment saves null for both increment and unit so rules default applies', () => {
+  const row = exerciseRowFromForm({
+    name: 'Cable row',
+    primary_muscle: 'back',
+    secondary_muscles: 'arms',
+    equipment: 'cable',
+    increment: '',
+    unit: 'lb',
+    load_mode: 'total',
+    movement_tags: 'horizontal_pull',
+    cues: '',
+    flag: '',
+    active: true,
+  });
+  assert.equal(row.increment, null);
+  assert.equal(row.unit, null);
+});
+
+test('a positive exercise increment keeps its value and unit', () => {
+  const row = exerciseRowFromForm({
+    name: 'Bench press',
+    primary_muscle: 'chest',
+    secondary_muscles: 'arms, shoulders',
+    equipment: 'barbell',
+    increment: '2.5',
+    unit: 'kg',
+    load_mode: 'total',
+    movement_tags: 'horizontal_press',
+    cues: 'Pause',
+    flag: '',
+    active: true,
+  });
+  assert.equal(row.increment, 2.5);
+  assert.equal(row.unit, 'kg');
 });
 
 test('a hostile exercise name cannot inject markup', () => {

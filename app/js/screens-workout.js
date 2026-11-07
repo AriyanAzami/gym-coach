@@ -121,7 +121,19 @@ export function finishSheet(session) {
     </div>`;
 }
 
-function setsEditor(sxId) {
+function setRowHtml(n, { weight = '', reps = '', unit = '', perHand = false, partial = false }) {
+  return `<div class="row" style="margin-bottom:8px" data-set="${n}">
+      <span class="mono muted" style="width:20px">${n}</span>
+      <input class="num" id="w-${n}" type="number" inputmode="decimal" step="0.5" value="${weight}" aria-label="Set ${n} weight">
+      <span class="small muted">${h(unit)}${perHand ? '/hand' : ''}</span>
+      <input class="num" id="r-${n}" type="number" inputmode="numeric" value="${reps}" aria-label="Set ${n} reps">
+      <label class="row small" style="margin:0;white-space:nowrap">
+        <input type="checkbox" id="p-${n}" style="width:auto;min-height:auto" ${partial ? 'checked' : ''}> partial
+      </label>
+    </div>`;
+}
+
+export function setsEditor(sxId) {
   const detail = store.state.sessionDetail;
   const x = detail.exercises.find((e) => e.id === sxId);
   const perHand = exerciseOf(x.exercise_id)?.load_mode === 'per_hand';
@@ -132,20 +144,19 @@ function setsEditor(sxId) {
     const existing = mine.find((s) => s.set_no === i + 1);
     const weight = existing?.weight ?? x.target_weight ?? '';
     const reps = existing?.reps ?? x.target_reps ?? '';
-    return `<div class="row" style="margin-bottom:8px" data-set="${i + 1}">
-      <span class="mono muted" style="width:20px">${i + 1}</span>
-      <input class="num" id="w-${i + 1}" type="number" inputmode="decimal" step="0.5" value="${weight}" aria-label="Set ${i + 1} weight">
-      <span class="small muted">${h(x.target_unit ?? '')}${perHand ? '/hand' : ''}</span>
-      <input class="num" id="r-${i + 1}" type="number" inputmode="numeric" value="${reps}" aria-label="Set ${i + 1} reps">
-      <label class="row small" style="margin:0;white-space:nowrap">
-        <input type="checkbox" id="p-${i + 1}" style="width:auto;min-height:auto" ${existing?.partial ? 'checked' : ''}> partial
-      </label>
-    </div>`;
+    return setRowHtml(i + 1, {
+      weight,
+      reps,
+      unit: x.target_unit ?? '',
+      perHand,
+      partial: Boolean(existing?.partial),
+    });
   }).join('');
 
   return `<h2>${h(nameOf(x.exercise_id))}</h2>
     <p class="small muted">Target ${x.target_sets} &times; ${x.target_reps} @ ${fmtLoad(x.target_weight, x.target_unit, perHand)}</p>
     <div id="set-rows" data-sx="${h(sxId)}" data-count="${count}">${rows}</div>
+    <button class="btn sm ghost full" style="margin-bottom:10px" data-action="add-set" data-id="${h(sxId)}">Add a set</button>
     <div class="grid2">
       <button class="btn ghost" data-sheet="cancel">Back</button>
       <button class="btn primary" data-action="save-sets" data-id="${h(sxId)}">Save sets</button>
@@ -195,6 +206,23 @@ export const actions = {
   },
 
   'edit-sets': (node) => sheet(setsEditor(node.dataset.id)),
+
+  'add-set': (node) => {
+    const box = q('#set-rows');
+    if (!box) return;
+    const x = store.state.sessionDetail.exercises.find((e) => e.id === node.dataset.id);
+    if (!x) return;
+    const perHand = exerciseOf(x.exercise_id)?.load_mode === 'per_hand';
+    const next = Number(box.dataset.count) + 1;
+    box.dataset.count = String(next);
+    box.insertAdjacentHTML('beforeend', setRowHtml(next, {
+      weight: x.target_weight ?? '',
+      reps: x.target_reps ?? '',
+      unit: x.target_unit ?? '',
+      perHand,
+      partial: false,
+    }));
+  },
 
   'rest': (node) => timer.start(Number(node.dataset.s), 'Rest'),
 
