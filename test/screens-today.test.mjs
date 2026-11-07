@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { state } from '../app/js/store.js';
 import { render } from '../app/js/screens-today.js';
 import rulesExample from '../supabase/seed/rules.example.json' with { type: 'json' };
+import { ymd } from '../app/js/engine.js';
 
 const EXERCISES = [
   { id: 'ex-1', name: 'Bench press', equipment: 'barbell', primary_muscle: 'chest', secondary_muscles: ['shoulders'], load_mode: 'total', increment: null, unit: null, flag: null, active: true },
@@ -135,7 +136,10 @@ test('an unresolvable rotation falls back to the first day', () => {
 });
 
 test('a session already logged today offers to resume instead of starting again', () => {
-  reset({ sessions: [{ id: 'se-1', date: new Date().toISOString().slice(0, 10), status: 'planned', kind: 'training', block_id: 'bl-1', day_index: 0 }] });
+  // ymd(), not toISOString(): the screen matches on the LOCAL calendar date, and
+  // east of UTC after ~20:30 those are different days. Using the UTC date here
+  // made this test fail at night — the exact bug ymd() exists to prevent.
+  reset({ sessions: [{ id: 'se-1', date: ymd(new Date()), status: 'planned', kind: 'training', block_id: 'bl-1', day_index: 0 }] });
   const html = render();
   assert.match(html, /data-action="resume-session"/);
   assert.doesNotMatch(html, /data-action="start-session"/);
