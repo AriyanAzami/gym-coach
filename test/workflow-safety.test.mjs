@@ -77,8 +77,10 @@ test('the claude step caps its turns', () => {
   assert.match(coach, /--max-turns \d+/);
 });
 
-test('the claude step runs on opus with the subscription token', () => {
-  assert.match(coach, /--model opus/);
+test('the claude step defaults to opus and uses the subscription token', () => {
+  assert.match(coach, /--model "\$MODEL"/);
+  assert.doesNotMatch(coach, /--model opus/);
+  assert.match(coach, /'sonnet' \? 'sonnet' : 'opus'/);
   assert.match(coach, /CLAUDE_CODE_OAUTH_TOKEN/);
 });
 

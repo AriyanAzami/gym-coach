@@ -271,7 +271,7 @@ begin
   end if;
 end $$;
 
--- Private bucket reserved for future screenshots. No public access, no anon read.
+-- Private bucket for Watch screenshots. No public access, no anon read.
 insert into storage.buckets (id, name, public)
 values ('shots', 'shots', false)
 on conflict (id) do nothing;

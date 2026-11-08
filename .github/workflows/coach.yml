@@ -81,7 +81,6 @@ jobs:
           MODEL: ${{ steps.prompt.outputs.model }}
         run: |
           claude -p "$(cat "coach/prompts/$KIND.md")" \
-            --model opus \
             --model "$MODEL" \
             --max-turns 40 \
             --tools "Read,Write,Edit,Bash" \
