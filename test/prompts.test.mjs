@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 
-const KINDS = ['block', 'revise_block', 'checkin', 'ask'];
+const KINDS = ['block', 'revise_block', 'checkin', 'ask', 'journal'];
 const read = (kind) => readFileSync(`coach/prompts/${kind}.md`, 'utf8');
 
 test('there is a prompt for every job kind and nothing else', () => {
@@ -73,11 +73,19 @@ test('revise_block works from the existing draft', () => {
 });
 
 test('checkin and ask produce prose, not a plan', () => {
-  for (const kind of ['checkin', 'ask']) {
+  for (const kind of ['checkin', 'ask', 'journal']) {
     assert.doesNotMatch(read(kind), /work\/output\.json/);
   }
 });
 
 test('ask answers the question that was asked', () => {
   assert.match(read('ask'), /job\.instructions|the question/i);
+});
+
+test('journal is read-only unless the write flag is set', () => {
+  const text = read('journal');
+  assert.match(text, /read-only/i);
+  assert.match(text, /job\.write/);
+  assert.match(text, /work\/writes\.json/);
+  assert.match(text, /journal_history/);
 });

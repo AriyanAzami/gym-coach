@@ -219,8 +219,7 @@ async function saveBlock(client, job, context) {
   return { output_md: null };
 }
 
-async function saveTargetDocument(client, job, context) {
-  const target = context.job?.target;
+async function saveTargetDocument(client, job, context, target = context.job?.target) {
   const userId = job.user_id;
   if (target === 'rules') {
     if (!existsSync('work/rules.json')) throw new Error('work/rules.json was not written');
@@ -246,6 +245,55 @@ async function saveTargetDocument(client, job, context) {
       key: 'manual', version: nextVersion, body_json: null, body_md: updatedMd, user_id: userId,
     }).then(rows);
   }
+}
+
+const clip = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+
+/* Pure: what a Journal turn may write besides its reply. Nothing is accepted
+   unless the owner switched changes on for that turn, and only field notes and
+   decisions are accepted at all; everything else in the file is dropped. */
+export function journalWrites(raw, context) {
+  const none = { notes: [], decisions: [] };
+  if (context?.job?.mode !== 'journal' || context.job.write !== true) return none;
+  if (!raw || typeof raw !== 'object') return none;
+  const notes = (Array.isArray(raw.notes) ? raw.notes : [])
+    .map((n) => clip(n, 1000)).filter(Boolean).slice(0, 5);
+  const decisions = (Array.isArray(raw.decisions) ? raw.decisions : [])
+    .map((d) => ({ title: clip(d?.title, 200), body: clip(d?.body, 2000) || null }))
+    .filter((d) => d.title).slice(0, 5);
+  return { notes, decisions };
+}
+
+/* Returns a short problem description, or null. A failed change should not throw
+   away the reply, so it is reported inside the output instead. */
+async function applyJournalChanges(client, job, context) {
+  if (context.job?.mode !== 'journal' || context.job.write !== true) return null;
+  const problems = [];
+
+  if (existsSync('work/writes.json')) {
+    try {
+      const writes = journalWrites(JSON.parse(readFileSync('work/writes.json', 'utf8')), context);
+      const userId = job.user_id;
+      if (writes.notes.length > 0) {
+        await client.from('coach_notes').insert(writes.notes.map((body) => ({ body, user_id: userId }))).then(rows);
+      }
+      if (writes.decisions.length > 0) {
+        await client.from('decisions').insert(writes.decisions.map((d) => ({ ...d, user_id: userId }))).then(rows);
+      }
+    } catch (err) {
+      problems.push(`notes or decisions: ${shortError(err)}`);
+    }
+  }
+
+  for (const target of ['rules', 'manual']) {
+    if (!existsSync(target === 'rules' ? 'work/rules.json' : 'work/manual.md')) continue;
+    try {
+      await saveTargetDocument(client, job, context, target);
+    } catch (err) {
+      problems.push(`${target}: ${shortError(err)}`);
+    }
+  }
+  return problems.length > 0 ? problems.join('; ') : null;
 }
 
 function readMarkdown(job, context) {
@@ -274,6 +322,12 @@ async function main(jobId) {
     const result = BLOCK_KINDS.includes(job.kind)
       ? await saveBlock(client, job, context)
       : readMarkdown(job, context);
+
+    const changeProblem = await applyJournalChanges(client, job, context);
+    if (changeProblem) {
+      const note = `_Some requested changes were not saved: ${changeProblem}._`;
+      result.output_md = `${result.output_md}\n\n---\n${note}`;
+    }
 
     // A failed backfill should not throw away a good check-in, so it is
     // reported inside the output, which lives behind RLS like the error column.

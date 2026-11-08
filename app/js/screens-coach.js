@@ -7,7 +7,7 @@
 import * as store from './store.js';
 import {
   h, cleanText, markdown, fmtDate, fmtDuration, fmtTokens,
-  extractJobMeta, encodeJobPrompt, toast, sheet, closeSheet, el,
+  extractJobMeta, encodeJobPrompt, parseJobPrompt, toast, sheet, closeSheet, el,
 } from './ui.js';
 import { nav } from './nav.js';
 
@@ -113,7 +113,9 @@ function jobTitle(j, meta) {
 }
 
 function jobsCard() {
-  const jobs = store.state.jobs.filter((j) => COACH_KINDS.includes(j.kind)).slice(0, 12);
+  const jobs = store.state.jobs
+    .filter((j) => COACH_KINDS.includes(j.kind) && parseJobPrompt(j.instructions).mode !== 'journal')
+    .slice(0, 12);
   if (jobs.length === 0) return '';
 
   const items = jobs.map((j, idx) => {

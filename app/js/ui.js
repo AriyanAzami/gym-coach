@@ -53,9 +53,11 @@ export function fmtTokens(n) {
 
 const JOB_HEADER_RE = /^\[([^\]]+)\]\s*\n?/;
 
-export function encodeJobPrompt({ model = 'opus', effort = 'high', target = null, instructions = '' } = {}) {
+export function encodeJobPrompt({ model = 'opus', effort = 'high', target = null, mode = null, write = false, instructions = '' } = {}) {
   const parts = [`model=${model}`, `effort=${effort}`];
   if (target) parts.push(`target=${target}`);
+  if (mode) parts.push(`mode=${mode}`);
+  if (write) parts.push('write=1');
   const body = String(instructions ?? '').trim();
   return `[${parts.join(' ')}]${body ? `\n${body}` : ''}`;
 }
@@ -73,6 +75,8 @@ export function parseJobPrompt(raw) {
     model: kv.model ?? null,
     effort: kv.effort ?? null,
     target: kv.target ?? null,
+    mode: kv.mode ?? null,
+    write: kv.write === '1',
     text: str.slice(m[0].length).trim(),
   };
 }
@@ -117,6 +121,8 @@ export function extractJobMeta(job) {
     effort,
     effortLabel,
     target,
+    mode: parsedPrompt.mode,
+    write: parsedPrompt.write,
     question: parsedPrompt.text,
     durationS,
     inputTokens,

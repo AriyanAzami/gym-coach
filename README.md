@@ -60,9 +60,17 @@ Three tiers, by what they cost:
   Discard each draft.
 - **Progress.** A training calendar, lift charts, weekly sets per muscle
   against your target, and your body-weight trend.
+- **Skipping.** Any exercise in the log can be skipped in one tap instead of
+  logging zeros. A skip is not a failed attempt: it leaves no sets, the
+  progression ignores it, and the coach sees it marked as skipped.
 - **Coach.** Leave notes, request a check-in or ask a question. You can pick
   the model (Opus or Sonnet) and the thinking effort for each job, and watch
   its status update live.
+- **Journal.** A running conversation with the coach. Each message picks the
+  model (Opus or Sonnet) and the thinking effort. The coach reads every logged
+  session and the earlier messages, and the whole history stays in the tab. It
+  only reads unless you switch on "Allow changes" for that message, which lets
+  it add notes and decisions or revise the rules and manual.
 - **Settings.** A rules editor that validates against the schema, with full
   version history and one-tap rollback. Also an editor for the coaching manual
   and the exercise library.
@@ -145,7 +153,8 @@ sequenceDiagram
 
 There are four kinds of job: `block` (write a new training block),
 `revise_block` (change a draft based on your comment), `checkin` (review the
-recent weeks) and `ask` (answer a question). An `ask` job can also target the
+recent weeks) and `ask` (answer a question). A Journal message is an `ask` job tagged
+`mode=journal`. An `ask` job can also target the
 rules or the manual. It then saves a new version of that document, and you
 can roll it back in Settings. Rules versions are checked against the schema
 before they are saved.

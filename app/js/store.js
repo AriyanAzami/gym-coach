@@ -51,6 +51,7 @@ export const state = {
   bodyTrend: [],
   sessions: [],
   jobs: [],
+  journal: [],
   notes: [],
   decisions: [],
   bodyMetrics: [],
@@ -118,7 +119,7 @@ export async function load() {
 
   const [
     documents, exercises, blocks, liftState, rotation,
-    weeklyVolume, trainingRate, bodyTrend, sessions, jobs, notes, decisions, bodyMetrics,
+    weeklyVolume, trainingRate, bodyTrend, sessions, jobs, notes, decisions, bodyMetrics, journal,
   ] = await Promise.all([
     client().from('documents').select('*').order('version', { ascending: false }).then(rows),
     client().from('exercises').select('*').order('name').then(rows),
@@ -135,6 +136,8 @@ export async function load() {
     client().from('coach_notes').select('*').order('created_at', { ascending: false }).limit(60).then(rows),
     client().from('decisions').select('*').order('date', { ascending: false }).limit(40).then(rows),
     client().from('body_metrics').select('*').order('date', { ascending: false }).limit(120).then(rows),
+    client().from('ai_jobs').select('*').eq('kind', 'ask').ilike('instructions', '%mode=journal%')
+      .order('created_at', { ascending: false }).limit(200).then(rows),
   ]);
 
   const latest = (key) => documents.find((d) => d.key === key) ?? null;
@@ -160,6 +163,7 @@ export async function load() {
     notes,
     decisions,
     bodyMetrics,
+    journal,
     blockDetails: {},
     liftHistory: {},
     loaded: true,
@@ -362,6 +366,11 @@ export function subscribeJobs(callback) {
       if (payload.eventType === 'DELETE') state.jobs = state.jobs.filter((j) => j.id !== row.id);
       else if (i >= 0) state.jobs[i] = row;
       else state.jobs.unshift(row);
+
+      const j = state.journal.findIndex((x) => x.id === row.id);
+      if (payload.eventType === 'DELETE') state.journal = state.journal.filter((x) => x.id !== row.id);
+      else if (j >= 0) state.journal[j] = row;
+      else if (/mode=journal/.test(row.instructions ?? '')) state.journal.unshift(row);
 
       if (row.status === 'done' && prevStatus !== 'done') {
         await load().catch(() => {});

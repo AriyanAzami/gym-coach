@@ -558,7 +558,7 @@ table.vol tr.short td { color: var(--warn); font-weight: 600; }
   max-width: 560px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   padding: 4px 6px;
 }
 .tab {
@@ -774,6 +774,7 @@ svg.chart { width: 100%; height: auto; overflow: visible; }
   margin: 6px 0 10px;
 }
 
+.meta-chip.warn { color: var(--warn); border-color: var(--warn); }
 .meta-chip {
   display: inline-flex;
   align-items: center;

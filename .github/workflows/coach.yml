@@ -61,8 +61,9 @@ jobs:
           node -e "
             const fs = require('node:fs');
             const c = require('./work/context.json');
-            const kinds = ['block', 'revise_block', 'checkin', 'ask'];
-            const k = c.job && c.job.kind;
+            const kinds = ['block', 'revise_block', 'checkin', 'ask', 'journal'];
+            const j = c.job || {};
+            const k = j.kind === 'ask' && j.mode === 'journal' ? 'journal' : j.kind;
             if (!kinds.includes(k)) { process.exit(1); }
             const m = c.job && c.job.model === 'sonnet' ? 'sonnet' : 'opus';
             const e = c.job && ['low', 'medium', 'high', 'max'].includes(c.job.effort) ? c.job.effort : 'high';

@@ -4,7 +4,7 @@
 
    Bump VERSION on every deploy so installed phones take the new shell. */
 
-const VERSION = 'v7';
+const VERSION = 'v8';
 const SHELL = `shell-${VERSION}`;
 
 const PRECACHE = [
@@ -23,6 +23,7 @@ const PRECACHE = [
   './js/rules-check.js',
   './js/screens-block.js',
   './js/screens-coach.js',
+  './js/screens-journal.js',
   './js/screens-progress.js',
   './js/screens-settings.js',
   './js/screens-today.js',

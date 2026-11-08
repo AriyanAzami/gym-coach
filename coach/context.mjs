@@ -20,6 +20,8 @@ export function parseJobInstructions(raw) {
   let model = 'opus';
   let effort = 'high';
   let target = null;
+  let mode = null;
+  let write = false;
   let instructions = raw ?? null;
   if (m) {
     let matched = false;
@@ -28,10 +30,30 @@ export function parseJobInstructions(raw) {
       if (k === 'model' && (v === 'opus' || v === 'sonnet')) { model = v; matched = true; }
       if (k === 'effort' && ['low', 'medium', 'high', 'max'].includes(v)) { effort = v; matched = true; }
       if (k === 'target' && (v === 'rules' || v === 'manual')) { target = v; matched = true; }
+      if (k === 'mode' && v === 'journal') { mode = v; matched = true; }
+      if (k === 'write' && v === '1') { write = true; matched = true; }
     }
     if (matched) instructions = m[2].trim() || null;
   }
-  return { model, effort, target, instructions };
+  return { model, effort, target, mode, write, instructions };
+}
+
+const META_RE = /^<!--\s*coach-meta:[^\n]*-->\s*\n?/;
+const HISTORY_TURNS = 30;
+const HISTORY_ANSWER_CHARS = 3000;
+
+/* Pure: the earlier turns of the Journal, oldest first, as the model should see
+   them. The turn being answered and any turn that never finished are left out. */
+export function buildJournalHistory(jobs, currentId) {
+  return jobs
+    .filter((j) => j.id !== currentId && j.status === 'done' && j.output_md)
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+    .slice(-HISTORY_TURNS)
+    .map((j) => ({
+      asked_at: j.created_at,
+      question: parseJobInstructions(j.instructions).instructions ?? '',
+      answer: String(j.output_md).replace(META_RE, '').trim().slice(0, HISTORY_ANSWER_CHARS),
+    }));
 }
 
 /* Pure: turns the fetched rows into the document the model reads. Separated from
@@ -108,6 +130,7 @@ export function buildContext(data, job) {
     .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
 
   const unconsumed = data.notes.filter((n) => !n.consumed_by_job);
+  const journal = parsedJob.mode === 'journal';
 
   return {
     generated_for_job: job.id,
@@ -117,6 +140,8 @@ export function buildContext(data, job) {
       model: parsedJob.model,
       effort: parsedJob.effort,
       target: parsedJob.target,
+      mode: parsedJob.mode,
+      write: parsedJob.write,
     },
 
     rules: rulesDoc?.body_json ?? null,
@@ -152,14 +177,19 @@ export function buildContext(data, job) {
 
     decisions: data.decisions.map((d) => ({ date: d.date, title: d.title, body: d.body })),
     coach_notes: unconsumed.map((n) => ({ body: n.body, created_at: n.created_at })),
-    consumed_note_ids: unconsumed.map((n) => n.id),
+    // A conversation turn reads the field notes but does not use them up: they
+    // are meant for the next plan.
+    consumed_note_ids: journal ? [] : unconsumed.map((n) => n.id),
+    ...(journal ? { journal_history: buildJournalHistory(data.journal ?? [], job.id) } : {}),
   };
 }
 
 async function fetchAll(client, job) {
+  const journal = parseJobInstructions(job.instructions).mode === 'journal';
   const since = new Date();
   since.setDate(since.getDate() - WEEKS_OF_HISTORY * 7);
-  const sinceYmd = since.toISOString().slice(0, 10);
+  // The Journal may look at everything ever logged, not just the recent weeks.
+  const sinceYmd = journal ? '1970-01-01' : since.toISOString().slice(0, 10);
 
   const [documents, exercises, sessions, liftState, weeklyVolume, trainingRate,
     bodyTrend, blocks, decisions, notes] = await Promise.all([
@@ -197,10 +227,16 @@ async function fetchAll(client, job) {
       .in('session_exercise_id', sessionExercises.map((x) => x.id)).then(rows)
     : [];
 
+  const journalJobs = journal
+    ? await client.from('ai_jobs').select('id,status,instructions,output_md,created_at')
+      .eq('kind', 'ask').ilike('instructions', '%mode=journal%').eq('status', 'done')
+      .order('created_at', { ascending: false }).limit(HISTORY_TURNS + 1).then(rows)
+    : [];
+
   return {
     documents, exercises, sessions, sets, sessionExercises, liftState,
     weeklyVolume, trainingRate, bodyTrend, blocks: allBlocks, days, slots,
-    decisions, notes,
+    decisions, notes, journal: journalJobs,
   };
 }
 
