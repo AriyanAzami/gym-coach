@@ -9,6 +9,12 @@ import { sessionComplete, ymd, parseAppleWatchText } from './engine.js';
 
 const nameOf = (id) => store.state.exercises.find((e) => e.id === id)?.name ?? 'Unknown exercise';
 const exerciseOf = (id) => store.state.exercises.find((e) => e.id === id) ?? null;
+
+/* A skipped exercise has no sets at all, which the lift views already ignore, so
+   a skip never reads as a failed attempt. The marker lives in deviation_note. */
+export const SKIPPED_NOTE = 'skipped';
+export const isSkipped = (x) => x?.deviation_note === SKIPPED_NOTE;
+
 const setsOf = (detail, sxId) => detail.sets
   .filter((s) => s.session_exercise_id === sxId)
   .sort((a, b) => a.set_no - b.set_no);
@@ -25,7 +31,8 @@ export function statusFor(detail, slots, rules) {
 
   if (withSlots.length === 0) {
     // A free session with no block day: complete when every exercise was logged.
-    return loggedSxIds.size === detail.exercises.length ? 'done' : 'partial';
+    const wanted = detail.exercises.filter((x) => !isSkipped(x));
+    return wanted.every((x) => loggedSxIds.has(x.id)) ? 'done' : 'partial';
   }
 
   const positionOf = new Map(slots.map((s) => [s.id, s.position]));
@@ -71,6 +78,22 @@ export function render(params = {}) {
     const done = mine.filter((s) => s.done);
     const slot = store.state.slots.find((s) => s.id === x.slot_id);
 
+    if (isSkipped(x)) {
+      return `<div class="card">
+        <div class="card-title">
+          <span class="ex-num">${idx + 1}</span>
+          <div class="grow">
+            <h3>${h(nameOf(x.exercise_id))}</h3>
+            <div class="sub muted">target ${x.target_sets} &times; ${x.target_reps} @ ${fmtLoad(x.target_weight, x.target_unit, perHand)}</div>
+          </div>
+          <span class="pill flag">skipped</span>
+        </div>
+        <div class="row wrap" style="margin-top:10px">
+          <button class="btn sm ghost" data-action="unskip-exercise" data-id="${h(x.id)}">Undo skip</button>
+        </div>
+      </div>`;
+    }
+
     const logged = done.length === 0
       ? '<div class="sub muted">not logged yet</div>'
       : done.map((s) => `<div class="sub mono">${s.set_no}. ${fmtLoad(s.weight, s.unit, perHand)} × ${s.reps}${s.partial ? ' <span class="pill flag">partial</span>' : ''}</div>`).join('');
@@ -88,6 +111,7 @@ export function render(params = {}) {
       <div class="row wrap" style="margin-top:10px">
         <button class="btn sm" data-action="done-exercise" data-id="${h(x.id)}">Done as prescribed</button>
         <button class="btn sm ghost" data-action="edit-sets" data-id="${h(x.id)}">Edit sets</button>
+        <button class="btn sm ghost" data-action="skip-exercise" data-id="${h(x.id)}">Skip</button>
         ${slot?.rest_s ? `<button class="btn sm ghost" data-action="rest" data-s="${slot.rest_s}">Rest</button>` : ''}
       </div>
     </div>`;
@@ -215,10 +239,13 @@ async function reload() {
 
 /* Copies the frozen targets into real sets. The quickest honest log: it records
    exactly what was prescribed, not a guess. */
-async function logPrescribed(sessionExercises) {
+/* Pure: the sets "Done as prescribed" would insert. Skipped exercises are left
+   alone and sets that already exist are never duplicated. */
+export function prescribedRows(sessionExercises, existingSets) {
   const rows = [];
   for (const x of sessionExercises) {
-    const already = new Set(setsOf(store.state.sessionDetail, x.id).map((s) => s.set_no));
+    if (isSkipped(x)) continue;
+    const already = new Set(existingSets.filter((s) => s.session_exercise_id === x.id).map((s) => s.set_no));
     for (let n = 1; n <= (x.target_sets ?? 0); n += 1) {
       if (already.has(n)) continue;
       rows.push({
@@ -232,6 +259,13 @@ async function logPrescribed(sessionExercises) {
       });
     }
   }
+  return rows;
+}
+
+/* Copies the frozen targets into real sets. The quickest honest log: it records
+   exactly what was prescribed, not a guess. */
+async function logPrescribed(sessionExercises) {
+  const rows = prescribedRows(sessionExercises, store.state.sessionDetail.sets);
   if (rows.length === 0) {
     toast('Already logged');
     return;
@@ -280,6 +314,23 @@ export const actions = {
   'done-exercise': async (node) => {
     const x = store.state.sessionDetail.exercises.find((e) => e.id === node.dataset.id);
     if (x) await logPrescribed([x]);
+  },
+
+  'skip-exercise': async (node) => {
+    const x = store.state.sessionDetail.exercises.find((e) => e.id === node.dataset.id);
+    if (!x) return;
+    for (const set of setsOf(store.state.sessionDetail, x.id)) {
+      await store.write({ table: 'sets', action: 'delete', id: set.id });
+    }
+    await store.write({ table: 'session_exercises', action: 'update', id: x.id, row: { deviation_note: SKIPPED_NOTE } });
+    await reload();
+    toast('Skipped');
+  },
+
+  'unskip-exercise': async (node) => {
+    await store.write({ table: 'session_exercises', action: 'update', id: node.dataset.id, row: { deviation_note: null } });
+    await reload();
+    toast('Skip undone');
   },
 
   'edit-sets': (node) => sheet(setsEditor(node.dataset.id)),

@@ -66,6 +66,7 @@ export function buildContext(data, job) {
       target_reps: sx.target_reps,
       target_sets: sx.target_sets,
       deviation_note: sx.deviation_note,
+      skipped: sx.deviation_note === 'skipped',
       sets: (setsByExercise.get(sx.id) ?? []).sort((a, b) => a.set_no - b.set_no),
     });
     exercisesBySession.set(sx.session_id, list);

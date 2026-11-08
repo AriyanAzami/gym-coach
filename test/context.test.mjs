@@ -147,3 +147,10 @@ test('no script under coach/ writes data to stdout another way', () => {
     assert.doesNotMatch(source, /process\.stdout\.write/, `${file} writes to stdout directly`);
   }
 });
+
+test('a skipped exercise is flagged so the coach can tell it from a missing log', () => {
+  const data = rows();
+  data.sessionExercises = [{ ...data.sessionExercises[0], deviation_note: 'skipped' }];
+  const ex = buildContext(data, job()).sessions[0].exercises[0];
+  assert.equal(ex.skipped, true);
+});

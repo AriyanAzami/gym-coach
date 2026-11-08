@@ -2,7 +2,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { state } from '../app/js/store.js';
-import { render, statusFor, finishSheet, setsEditor, hrZonesPayload } from '../app/js/screens-workout.js';
+import { render, statusFor, finishSheet, setsEditor, hrZonesPayload, SKIPPED_NOTE, prescribedRows } from '../app/js/screens-workout.js';
 import { parseAppleWatchText } from '../app/js/engine.js';
 import rulesExample from '../supabase/seed/rules.example.json' with { type: 'json' };
 
@@ -241,4 +241,50 @@ test('saving the finish sheet again keeps screenshots attached earlier', () => {
     hrZonesPayload('z3:4', existing, ['u/se-1/b.png', 'u/se-1/a.png']),
     { raw: 'z3:4', shots: ['u/se-1/a.png', 'u/se-1/b.png'] },
   );
+});
+
+test('an exercise can be skipped', () => {
+  const html = render({ sessionId: 'se-1' });
+  assert.match(html, /data-action="skip-exercise" data-id="sx-1"/);
+});
+
+test('a skipped exercise shows as skipped and offers undo instead of logging', () => {
+  const exercises = structuredClone(SESSION_EXERCISES);
+  exercises[0].deviation_note = SKIPPED_NOTE;
+  reset({ sessionDetail: { session: SESSION, exercises, sets: [] } });
+  const html = render({ sessionId: 'se-1' });
+  assert.match(html, /skipped/i);
+  assert.match(html, /data-action="unskip-exercise" data-id="sx-1"/);
+  assert.doesNotMatch(html, /data-action="done-exercise" data-id="sx-1"/);
+  assert.doesNotMatch(html, /data-action="edit-sets" data-id="sx-1"/);
+  assert.match(html, /data-action="done-exercise" data-id="sx-2"/);
+});
+
+test('skipping the opener leaves the session partial', () => {
+  const exercises = structuredClone(SESSION_EXERCISES);
+  exercises[0].deviation_note = SKIPPED_NOTE;
+  const sets = [{ id: 'st-9', session_exercise_id: 'sx-2', set_no: 1, weight: 30, unit: 'lb', reps: 10, done: true }];
+  assert.equal(statusFor({ session: SESSION, exercises, sets }, SLOTS, rulesExample), 'partial');
+});
+
+test('a free session counts a skipped exercise as handled', () => {
+  const exercises = [
+    { id: 'sx-a', session_id: 'se-1', slot_id: null, exercise_id: 'ex-1', position: 0, deviation_note: SKIPPED_NOTE },
+    { id: 'sx-b', session_id: 'se-1', slot_id: null, exercise_id: 'ex-2', position: 1 },
+  ];
+  const sets = [{ id: 'st-1', session_exercise_id: 'sx-b', set_no: 1, reps: 10, done: true }];
+  assert.equal(statusFor({ session: SESSION, exercises, sets }, [], rulesExample), 'done');
+});
+
+test('a session with every exercise skipped is skipped', () => {
+  const exercises = structuredClone(SESSION_EXERCISES).map((x) => ({ ...x, deviation_note: SKIPPED_NOTE }));
+  assert.equal(statusFor({ session: SESSION, exercises, sets: [] }, SLOTS, rulesExample), 'skipped');
+});
+
+test('Done as prescribed never logs a skipped exercise', () => {
+  const exercises = structuredClone(SESSION_EXERCISES);
+  exercises[0].deviation_note = SKIPPED_NOTE;
+  const rows = prescribedRows(exercises, []);
+  assert.ok(rows.length > 0);
+  assert.ok(rows.every((r) => r.session_exercise_id === 'sx-2'));
 });
