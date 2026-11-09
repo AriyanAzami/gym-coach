@@ -78,3 +78,8 @@ test('the default models are the ones the settings table defaults to', () => {
     assert.ok(source.includes(`'${id}'`), `${id} is not the function's fallback`);
   }
 });
+
+test('the wake trigger function cannot be called over the API', () => {
+  const all = readFileSync('supabase/migrations/0006_health_wake_revoke.sql', 'utf8');
+  assert.match(all, /revoke execute on function health_runs_wake\(\) from public, anon, authenticated;/);
+});

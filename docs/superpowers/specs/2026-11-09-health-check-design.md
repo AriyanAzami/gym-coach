@@ -57,6 +57,8 @@ secrets) so the repo finding stays fresh.
 - `supabase/functions/health-check/checks.js` — pure, tested with `node --test`.
 - `engine.js`, `rules-check.js` and `rules.schema.json` in that folder are
   byte-identical copies of the app's; a test fails if they drift.
+- The deployed `index.ts` imports those shared files from jsDelivr pinned to a
+  commit, so a change to them reaches the function only when it is redeployed.
 - `app/js/screens-health.js` — the tab: latest run by area and severity, AI
   summary, history, Run now, schedule and model settings.
 

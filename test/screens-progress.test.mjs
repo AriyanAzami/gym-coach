@@ -4,6 +4,10 @@ import assert from 'node:assert/strict';
 import { state } from '../app/js/store.js';
 import { render } from '../app/js/screens-progress.js';
 import rulesExample from '../supabase/seed/rules.example.json' with { type: 'json' };
+import { isoWeekStart, ymd } from '../app/js/engine.js';
+
+// The volume card shows the current week, so the fixture has to be this week.
+const THIS_WEEK = isoWeekStart(ymd(new Date()));
 
 const EXERCISES = [
   { id: 'ex-1', name: 'Bench press', primary_muscle: 'chest', secondary_muscles: ['arms'], equipment: 'barbell', load_mode: 'total', active: true },
@@ -31,8 +35,8 @@ function reset(over = {}) {
     ],
     liftHistory: { 'ex-1': HISTORY },
     weeklyVolume: [
-      { week_start: '2026-11-02', muscle: 'chest', total_sets: 6, direct_sets: 6, indirect_sets: 0 },
-      { week_start: '2026-11-02', muscle: 'back', total_sets: 10, direct_sets: 10, indirect_sets: 0 },
+      { week_start: THIS_WEEK, muscle: 'chest', total_sets: 6, direct_sets: 6, indirect_sets: 0 },
+      { week_start: THIS_WEEK, muscle: 'back', total_sets: 10, direct_sets: 10, indirect_sets: 0 },
     ],
     bodyTrend: [
       { week_start: '2026-11-02', avg_weight: 70.4, unit: 'kg', entries: 1, rate_3w: 0.13 },

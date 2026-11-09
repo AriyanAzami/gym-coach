@@ -13,12 +13,12 @@ const live = process.env.RUN_LIVE_TESTS === '1' && configured;
 const TABLES = [
   'exercises', 'blocks', 'block_days', 'block_slots', 'sessions',
   'session_exercises', 'sets', 'body_metrics', 'decisions', 'coach_notes',
-  'documents', 'ai_jobs',
+  'documents', 'ai_jobs', 'health_runs', 'health_settings',
 ];
 
 const VIEWS = [
   'current_documents', 'lift_history', 'lift_exposures', 'lift_state',
-  'weekly_muscle_volume', 'training_rate', 'rotation_next', 'body_trend',
+  'weekly_muscle_volume', 'training_rate', 'rotation_next', 'body_trend', 'health_due',
 ];
 
 describe('an anonymous client', { skip: live ? false : 'set RUN_LIVE_TESTS=1 to run against the live project' }, () => {
