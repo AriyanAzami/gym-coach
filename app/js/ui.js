@@ -363,3 +363,28 @@ export function wireChrome(actions) {
   el('timer-minus').addEventListener('click', () => timer.adjust(-30));
   el('timer-skip').addEventListener('click', () => timer.stop());
 }
+
+export function scaledSize(width, height, maxSide) {
+  const scale = Math.min(1, maxSide / Math.max(width, height));
+  return { width: Math.round(width * scale), height: Math.round(height * scale) };
+}
+
+/* A full-size iPhone screenshot is 1–3 MB and takes a vision model ~10x longer
+   to read than a scaled JPEG; the numbers stay perfectly legible at 1600 px.
+   Anything the browser cannot decode is uploaded as it came. */
+export async function shrinkImage(file, maxSide = 1600, quality = 0.82) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const { width, height } = scaledSize(bitmap.width, bitmap.height, maxSide);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+    bitmap.close?.();
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+    if (!blob) return file;
+    return new File([blob], 'watch.jpg', { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}

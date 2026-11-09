@@ -19,3 +19,7 @@ verify_jwt = true
 # is the claim: the function only acts on a run that is still queued.
 [functions.health-check]
 verify_jwt = false
+
+# Called by the signed-in app with its session token.
+[functions.read-watch-shots]
+verify_jwt = true

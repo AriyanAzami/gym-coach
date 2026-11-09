@@ -3,7 +3,7 @@
    numbers per set. */
 
 import * as store from './store.js';
-import { h, fmtLoad, fmtRest, toast, sheet, closeSheet, timer, el, q } from './ui.js';
+import { h, fmtLoad, fmtRest, toast, sheet, closeSheet, timer, el, q, shrinkImage } from './ui.js';
 import { nav } from './nav.js';
 import { sessionComplete, ymd, parseAppleWatchText } from './engine.js';
 
@@ -422,27 +422,40 @@ export const actions = {
   },
 
   'upload-watch-shots': async (node) => {
-    const files = Array.from(node.files ?? []);
-    if (files.length === 0) return;
+    const picked = Array.from(node.files ?? []);
+    if (picked.length === 0) return;
     const statusNode = el('f-shots-status');
-    if (statusNode) {
+    const status = (text) => {
+      if (!statusNode) return;
       statusNode.style.display = 'block';
-      statusNode.textContent = `Uploading ${files.length} screenshot${files.length === 1 ? '' : 's'}…`;
-    }
+      statusNode.textContent = text;
+    };
+    const n = picked.length;
+    const shots = `${n} screenshot${n === 1 ? '' : 's'}`;
+    status(`Uploading ${shots}…`);
 
     const sessionId = store.state.sessionDetail?.session?.id;
+    let paths;
     try {
-      const paths = await store.uploadSessionShots(sessionId, files);
+      const files = await Promise.all(picked.map((f) => shrinkImage(f)));
+      paths = await store.uploadSessionShots(sessionId, files);
       pendingShotPaths.push(...paths);
-      if (statusNode) {
-        statusNode.textContent = `✓ ${paths.length} screenshot${paths.length === 1 ? '' : 's'} attached for Coach — tap "Paste Watch text" or Save`;
-      }
-      toast(`${paths.length} screenshot${paths.length === 1 ? '' : 's'} attached`);
     } catch (err) {
-      if (statusNode) {
-        statusNode.textContent = `Could not upload screenshot: ${err.message ?? 'error'}`;
-      }
+      status(`Could not upload screenshot: ${err.message ?? 'error'}`);
       toast(err.message ?? 'Could not upload screenshot', 'bad');
+      return;
+    }
+
+    status(`Reading ${shots}…`);
+    try {
+      const { fields } = await store.readWatchShots(paths);
+      const count = applyParsedWatch(fields ?? {});
+      status(count > 0
+        ? `✓ Filled ${count} field${count === 1 ? '' : 's'} from ${shots} — check them, then Save`
+        : `✓ ${shots} attached, but no numbers could be read — fill them in by hand`);
+      toast(count > 0 ? `Filled ${count} field${count === 1 ? '' : 's'}` : 'No numbers found', count > 0 ? undefined : 'bad');
+    } catch (err) {
+      status(`✓ ${shots} attached. Could not read them (${err.message ?? 'error'}) — fill the numbers in by hand`);
     }
   },
 

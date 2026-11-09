@@ -427,3 +427,22 @@ export function subscribeHealth(callback) {
     .subscribe();
   return healthChannel;
 }
+
+/* Asks the read-watch-shots function for the numbers on screenshots already
+   uploaded. Returns { fields, model }; writes nothing. */
+export async function readWatchShots(paths) {
+  const { data: { session } } = await client().auth.getSession();
+  if (!session) throw new Error('not signed in');
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/read-watch-shots`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${session.access_token}`,
+      apikey: SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ paths }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error ?? `could not read the screenshots (${response.status})`);
+  return body;
+}
