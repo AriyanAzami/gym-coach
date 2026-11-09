@@ -73,8 +73,10 @@ test('a failed model call still finishes the run with the deterministic findings
 });
 
 test('the default models are the ones the settings table defaults to', () => {
-  for (const id of ['nvidia/nemotron-3-ultra-550b-a55b', 'mistralai/mistral-large-4-1t-a52b']) {
-    assert.ok(sql.includes(`'${id}'`), `${id} is not a settings default`);
+  const migrations = sql + readFileSync('supabase/migrations/0007_health_fast_fallback.sql', 'utf8');
+  assert.match(migrations, /alter column fallback_model set default 'deepseek-ai\/deepseek-v4\.1-flash'/);
+  for (const id of ['nvidia/nemotron-3-ultra-550b-a55b', 'deepseek-ai/deepseek-v4.1-flash']) {
+    assert.ok(migrations.includes(`'${id}'`), `${id} is not a settings default`);
     assert.ok(source.includes(`'${id}'`), `${id} is not the function's fallback`);
   }
 });

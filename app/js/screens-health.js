@@ -18,9 +18,9 @@ const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satur
 const CADENCES = [['daily', 'Daily'], ['weekly', 'Weekly'], ['fortnightly', 'Every two weeks'], ['monthly', 'Monthly']];
 const MODELS = [
   'nvidia/nemotron-3-ultra-550b-a55b',
+  'deepseek-ai/deepseek-v4.1-flash',
   'mistralai/mistral-large-4-1t-a52b',
   'moonshotai/kimi-k2.6',
-  'deepseek-ai/deepseek-v4.1-flash',
   'z-ai/glm-5.3-flash',
   'nvidia/nemotron-3-super-120b-a12b',
 ];

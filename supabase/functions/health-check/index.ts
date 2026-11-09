@@ -10,17 +10,19 @@
 
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import { runChecks, repoFindings } from './checks.js';
+import { modelContext } from './context.js';
 import schema from './rules.schema.json' with { type: 'json' };
 
 const DEFAULT_PRIMARY = 'nvidia/nemotron-3-ultra-550b-a55b';
-const DEFAULT_FALLBACK = 'mistralai/mistral-large-4-1t-a52b';
+const DEFAULT_FALLBACK = 'deepseek-ai/deepseek-v4.1-flash';
 const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
 const WEEKS_OF_HISTORY = 8;
 // The platform stops a function at 150 s; leave room to write the result.
 const MODEL_BUDGET_MS = 135_000;
-const PRIMARY_CAP_MS = 105_000;
+const PRIMARY_CAP_MS = 80_000;
 const MAX_AI_FINDINGS = 12;
+const MAX_OUTPUT_TOKENS = 2048;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -129,38 +131,6 @@ async function readGitHub() {
   }
 }
 
-// deno-lint-ignore no-explicit-any
-function modelContext(d: any, findings: unknown[]) {
-  return {
-    today: d.today,
-    rules: d.rules,
-    manual: d.manual,
-    exercises: d.exercises,
-    sessions: d.sessions,
-    lift_state: d.liftState,
-    weekly_muscle_volume: d.weeklyVolume,
-    training_rate: d.trainingRate,
-    body_trend: d.bodyTrend,
-    body_metrics: d.bodyMetrics,
-    active_block: d.activeBlock,
-    decisions: d.decisions,
-    coach_notes: d.notes,
-    // deno-lint-ignore no-explicit-any
-    coach_jobs: d.jobs.map((j: any) => ({ kind: j.kind, status: j.status, error: j.error, created_at: j.created_at })),
-    journal: d.jobs
-      // deno-lint-ignore no-explicit-any
-      .filter((j: any) => j.status === 'done' && /mode=journal/.test(j.instructions ?? ''))
-      .slice(0, 10)
-      // deno-lint-ignore no-explicit-any
-      .map((j: any) => ({
-        at: j.created_at,
-        question: String(j.instructions ?? '').replace(/^\[[^\]]*\]\s*/, '').slice(0, 1500),
-        answer: String(j.output_md ?? '').replace(/^<!--[\s\S]*?-->\s*/, '').slice(0, 1500),
-      })),
-    checker_findings: findings,
-  };
-}
-
 function parseModelJson(text: string) {
   const cleaned = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
   const start = cleaned.indexOf('{');
@@ -194,7 +164,11 @@ async function callModel(model: string, context: unknown, timeoutMs: number) {
     body: JSON.stringify({
       model,
       temperature: 0.2,
-      max_tokens: 4096,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      // NVIDIA's own reasoning models think at length before answering, which
+      // alone can outlast the time limit. The checker already did the reasoning
+      // that needs rigour; this pass is a read-through.
+      ...(model.startsWith('nvidia/') ? { chat_template_kwargs: { enable_thinking: false } } : {}),
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: JSON.stringify(context) },
