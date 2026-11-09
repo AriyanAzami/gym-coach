@@ -67,3 +67,11 @@ test('malformed input yields no patches and does not throw', () => {
   }
   assert.deepEqual(sessionMetricPatches([{ session_id: 'se-1', calories: 200 }], {}), []);
 });
+
+test('total calories read off a screenshot are backfilled like the rest', () => {
+  const out = sessionMetricPatches(
+    [{ session_id: 'se-1', total_calories: 437 }],
+    { session_screenshots: [{ session_id: 'se-1' }], sessions: [{ id: 'se-1', total_calories: null, hr_zones: null }] },
+  );
+  assert.deepEqual(out, [{ id: 'se-1', patch: { total_calories: 437 } }]);
+});

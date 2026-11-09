@@ -957,3 +957,19 @@ button.cal-day:hover {
 }
 .finding.bad { border-left-color: var(--bad); }
 .finding-title { font-weight: 600; }
+.read-panel { margin-top: 10px; display: grid; gap: 4px; font-size: 0.86rem; }
+.read-step { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.read-step.done { color: var(--text); }
+.read-step.bad { color: var(--bad); }
+.read-list { margin: 2px 0 4px; padding-left: 18px; }
+.read-list li { margin: 2px 0; }
+.spin {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite; display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+input.from-watch { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.span2 { grid-column: 1 / -1; }
+.watch-summary { margin: 12px 0; padding: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.watch-summary .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }

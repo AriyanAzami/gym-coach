@@ -358,6 +358,7 @@ export function parseAppleWatchText(raw) {
   const out = {
     duration_min: null,
     calories: null,
+    total_calories: null,
     avg_hr: null,
     peak_hr: null,
     effort_1_10: null,
@@ -400,6 +401,9 @@ export function parseAppleWatchText(raw) {
     const anyCal = text.match(/\b(\d{2,4})\s*(?:CAL|KCAL)\b/i);
     if (anyCal) out.calories = Number(anyCal[1]);
   }
+
+  const totalCal = text.match(/Total\s*(?:Calories|Energy)[\s:]*(\d{1,4})\s*(?:CAL|KCAL)?/i);
+  if (totalCal) out.total_calories = Number(totalCal[1]);
 
   // 3. Average HR: "Avg. Heart Rate 130BPM" or "130 BPM AVG".
   const avgHr = text.match(/Avg\.?\s*Heart\s*Rate[\s:]*(\d{2,3})\s*(?:BPM)?/i)

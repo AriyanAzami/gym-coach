@@ -4,7 +4,7 @@
 
    Bump VERSION on every deploy so installed phones take the new shell. */
 
-const VERSION = 'v12';
+const VERSION = 'v13';
 const SHELL = `shell-${VERSION}`;
 
 const PRECACHE = [
@@ -40,7 +40,9 @@ const PRECACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL)
-      .then((cache) => cache.addAll(PRECACHE))
+      // cache: 'reload' skips the HTTP cache, so a new version never mixes in
+      // files the browser kept from the old one.
+      .then((cache) => cache.addAll(PRECACHE.map((url) => new Request(url, { cache: 'reload' }))))
       .then(() => self.skipWaiting()),
   );
 });

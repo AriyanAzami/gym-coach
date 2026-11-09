@@ -11,8 +11,9 @@ import { encodeBase64 } from 'jsr:@std/encoding@1/base64';
 import { WATCH_PROMPT, parseWatchReply, ownedPath } from './watch.js';
 
 const MODELS: [string, number][] = [
-  ['nvidia/nemotron-3.5-super-vl-120b-a12b', 30_000],
-  ['meta/llama-3.2-90b-vision-instruct', 25_000],
+  // A replica can take 35 s on a busy day; the platform stops the function at 150.
+  ['nvidia/nemotron-3.5-super-vl-120b-a12b', 60_000],
+  ['meta/llama-3.2-90b-vision-instruct', 45_000],
 ];
 const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 const MAX_SHOTS = 4;

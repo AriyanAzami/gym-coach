@@ -56,6 +56,7 @@ function collectRunMeta(job, context, outputChars = 0) {
 const METRIC_OK = {
   duration_min: (v) => v >= 0,
   calories: (v) => v >= 0,
+  total_calories: (v) => v >= 0,
   avg_hr: (v) => v > 0,
   peak_hr: (v) => v > 0,
   effort_1_10: (v) => v >= 1 && v <= 10,

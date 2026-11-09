@@ -3,7 +3,7 @@
    minimums, and the body-weight trend. */
 
 import * as store from './store.js';
-import { h, cleanText, fmtLoad, fmtDate, toast, sheet } from './ui.js';
+import { h, cleanText, fmtLoad, fmtDate, toast, sheet, closeSheet } from './ui.js';
 import { nav } from './nav.js';
 import { line, bars } from './charts.js';
 import { volumeVsTarget, ymd, isoWeekStart, addDays } from './engine.js';
@@ -298,20 +298,45 @@ function bodyCard() {
   </div>`;
 }
 
+/* The Apple Watch numbers saved with a session, or a way to add them. */
+function watchSummary(session) {
+  const stat = (label, value) => (value === null || value === undefined || value === ''
+    ? ''
+    : `<div class="stat"><div class="v">${h(value)}</div><div class="l">${h(label)}</div></div>`);
+  const stats = [
+    stat('Minutes', session.duration_min),
+    stat('Effort', session.effort_1_10 ? `${session.effort_1_10}/10` : null),
+    stat('Active kcal', session.calories),
+    stat('Total kcal', session.total_calories),
+    stat('Avg HR', session.avg_hr),
+    stat('Peak HR', session.peak_hr),
+  ].filter(Boolean).join('');
+  const zones = [...String(session.hr_zones?.raw ?? '').matchAll(/z([1-5]):(\d+)/g)]
+    .map((m) => `<span class="meta-chip">Z${m[1]} ${m[2]}m</span>`).join('');
+
+  if (!stats && !zones) {
+    return `<div class="watch-summary empty">
+      <div class="eyebrow">Apple Watch</div>
+      <p class="small muted">No Apple Watch data for this session yet.</p>
+      <button class="btn sm" data-action="add-watch-data" data-id="${h(session.id)}">Add from screenshots</button>
+    </div>`;
+  }
+  return `<div class="watch-summary">
+    <div class="eyebrow">Apple Watch</div>
+    ${stats ? `<div class="stat-row">${stats}</div>` : ''}
+    ${zones ? `<div class="meta-bar">${zones}</div>` : ''}
+  </div>`;
+}
+
 export function dayDetailSheet(session, detail) {
   const dayRow = (store.state.days ?? []).find((d) => d.block_id === session.block_id && d.day_index === session.day_index);
   const title = session.kind === 'rest'
     ? 'Rest Day'
     : dayRow?.name ?? (session.day_index !== null && session.day_index !== undefined ? `Day ${session.day_index + 1}` : 'Training Session');
 
-  const meta = [
-    session.duration_min ? `<span class="meta-chip">${session.duration_min} min</span>` : '',
-    session.calories ? `<span class="meta-chip">${session.calories} kcal</span>` : '',
-    session.avg_hr ? `<span class="meta-chip">Avg ${session.avg_hr} bpm</span>` : '',
-    session.peak_hr ? `<span class="meta-chip">Peak ${session.peak_hr} bpm</span>` : '',
-    session.effort_1_10 ? `<span class="meta-chip">Effort ${session.effort_1_10}/10</span>` : '',
-    session.pain && session.pain !== 'none' ? `<span class="pill flag">Pain: ${cleanText(session.pain)}</span>` : '',
-  ].filter(Boolean).join('');
+  const meta = session.pain && session.pain !== 'none'
+    ? `<span class="pill flag">Pain: ${cleanText(session.pain)}</span>`
+    : '';
 
   const exList = (detail?.exercises ?? []).map((sx, idx) => {
     const ex = (store.state.exercises ?? []).find((e) => e.id === sx.exercise_id);
@@ -337,6 +362,7 @@ export function dayDetailSheet(session, detail) {
   return `<div class="eyebrow">${fmtDate(session.date)} · ${h(session.status)}</div>
     <h2>${h(title)}</h2>
     ${meta ? `<div class="meta-bar">${meta}</div>` : ''}
+    ${session.kind === 'rest' ? '' : watchSummary(session)}
     ${session.notes ? `<p class="small muted">${cleanText(session.notes)}</p>` : ''}
     ${exList || '<p class="small muted">No exercises recorded for this day.</p>'}
     <div class="grid2" style="margin-top:14px">
@@ -403,6 +429,12 @@ export const actions = {
     } catch (err) {
       toast(err.message ?? 'Could not load session details', 'bad');
     }
+  },
+  'add-watch-data': async (node) => {
+    const id = node.dataset.id;
+    await store.loadSessionDetail(id);
+    closeSheet();
+    nav.go('workout', { sessionId: id, openFinish: true });
   },
   'open-logged-session': async (node) => {
     const id = node.dataset.id;

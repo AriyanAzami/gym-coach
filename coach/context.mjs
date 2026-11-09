@@ -159,7 +159,7 @@ export function buildContext(data, job) {
     sessions: data.sessions.map((s) => ({
       id: s.id, date: s.date, kind: s.kind, status: s.status,
       day_index: s.day_index, duration_min: s.duration_min,
-      calories: s.calories, avg_hr: s.avg_hr, peak_hr: s.peak_hr,
+      calories: s.calories, total_calories: s.total_calories, avg_hr: s.avg_hr, peak_hr: s.peak_hr,
       hr_zones: s.hr_zones, effort_1_10: s.effort_1_10, pain: s.pain, notes: s.notes,
       exercises: (exercisesBySession.get(s.id) ?? []).sort((a, b) => a.position - b.position),
     })),

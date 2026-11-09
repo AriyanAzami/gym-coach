@@ -288,3 +288,8 @@ test('Done as prescribed never logs a skipped exercise', () => {
   assert.ok(rows.length > 0);
   assert.ok(rows.every((r) => r.session_exercise_id === 'sx-2'));
 });
+
+test('parseAppleWatchText also picks up total calories', () => {
+  assert.equal(parseAppleWatchText('Active Calories 385CAL\nTotal Calories 455CAL').total_calories, 455);
+  assert.equal(parseAppleWatchText('Active Calories 385CAL').total_calories, null);
+});

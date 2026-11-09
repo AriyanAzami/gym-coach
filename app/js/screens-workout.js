@@ -129,13 +129,16 @@ export function render(params = {}) {
    never forced to answer a question they have no answer to. */
 export function finishSheet(session, prefill = {}) {
   let defaultDuration = prefill.duration_min ?? session?.duration_min ?? '';
+  let durationGuess = false;
   if (defaultDuration === '' && session?.created_at) {
     const elapsedMin = Math.round((Date.now() - Date.parse(session.created_at)) / 60000);
     if (Number.isFinite(elapsedMin) && elapsedMin > 0 && elapsedMin <= 240) {
       defaultDuration = elapsedMin;
+      durationGuess = true;
     }
   }
   const cal = prefill.calories ?? session?.calories ?? '';
+  const totalCal = prefill.total_calories ?? session?.total_calories ?? '';
   const avgHr = prefill.avg_hr ?? session?.avg_hr ?? '';
   const peakHr = prefill.peak_hr ?? session?.peak_hr ?? '';
   const effort = prefill.effort_1_10 ?? session?.effort_1_10 ?? '';
@@ -170,17 +173,18 @@ export function finishSheet(session, prefill = {}) {
           <code>${h((globalThis.location?.origin ?? '') + (globalThis.location?.pathname ?? '/'))}?watch=TEXT</code>
         </div>
       </details>
-      <div id="f-shots-status" class="small muted" style="margin-top:6px;display:none"></div>
+      <div id="f-read-panel"></div>
       <div id="f-earlier-shots"></div>
     </div>
 
     <div class="grid2">
-      <label>Duration (min)<input id="f-duration_min" class="num" type="number" inputmode="numeric" min="0" value="${h(defaultDuration)}"></label>
-      <label>Calories<input id="f-calories" class="num" type="number" inputmode="numeric" min="0" value="${h(cal)}"></label>
+      <label>Duration (min)<input id="f-duration_min" class="num" type="number" inputmode="numeric" min="0" value="${h(defaultDuration)}"${durationGuess ? ' data-guess="1"' : ''}></label>
+      <label>Effort 1-10<input id="f-effort_1_10" class="num" type="number" inputmode="numeric" min="1" max="10" value="${h(effort)}"></label>
+      <label>Active calories<input id="f-calories" class="num" type="number" inputmode="numeric" min="0" value="${h(cal)}"></label>
+      <label>Total calories<input id="f-total_calories" class="num" type="number" inputmode="numeric" min="0" value="${h(totalCal)}"></label>
       <label>Average HR<input id="f-avg_hr" class="num" type="number" inputmode="numeric" min="0" value="${h(avgHr)}"></label>
       <label>Peak HR<input id="f-peak_hr" class="num" type="number" inputmode="numeric" min="0" value="${h(peakHr)}"></label>
-      <label>Effort 1-10<input id="f-effort_1_10" class="num" type="number" inputmode="numeric" min="1" max="10" value="${h(effort)}"></label>
-      <label>HR zones<input id="f-hr_zones" type="text" placeholder="z2:12 z3:20" value="${h(zones)}"></label>
+      <label class="span2">HR zones<input id="f-hr_zones" type="text" placeholder="z2:12 z3:20" value="${h(zones)}"></label>
     </div>
     <label>Pain<input id="f-pain" type="text" value="${h(pain)}"></label>
     <label>Notes<textarea id="f-notes" rows="3">${h(notes)}</textarea></label>
@@ -302,6 +306,7 @@ export function applyParsedWatch(parsed) {
   };
   setIf('duration_min', parsed.duration_min);
   setIf('calories', parsed.calories);
+  setIf('total_calories', parsed.total_calories);
   setIf('avg_hr', parsed.avg_hr);
   setIf('peak_hr', parsed.peak_hr);
   setIf('effort_1_10', parsed.effort_1_10);
@@ -323,27 +328,108 @@ export function planEarlierShots(folder, files) {
 
 let earlierShots = null;
 
-async function readAndFill(paths, label, status) {
-  status(`Reading ${label}…`);
-  try {
-    const { fields } = await store.readWatchShots(paths);
-    const count = applyParsedWatch(fields ?? {});
-    status(count > 0
-      ? `✓ Filled ${count} field${count === 1 ? '' : 's'} from ${label} — check them, then Save`
-      : `✓ ${label} attached, but no numbers could be read — fill them in by hand`);
-    toast(count > 0 ? `Filled ${count} field${count === 1 ? '' : 's'}` : 'No numbers found', count > 0 ? undefined : 'bad');
-  } catch (err) {
-    status(`✓ ${label} attached. Could not read them (${err.message ?? 'error'}) — fill the numbers in by hand`);
+export const WATCH_FIELDS = [
+  ['duration_min', 'Workout time', ' min'],
+  ['calories', 'Active calories', ' kcal'],
+  ['total_calories', 'Total calories', ' kcal'],
+  ['avg_hr', 'Avg HR', ' bpm'],
+  ['peak_hr', 'Peak HR', ' bpm'],
+  ['effort_1_10', 'Effort', '/10'],
+  ['hr_zones', 'HR zones', ''],
+];
+
+/* What reading the screenshots should do to the form. Only empty boxes are
+   filled; a box the owner already filled keeps its value and the Watch reading
+   is offered beside it. The clock-based duration guess counts as empty. */
+export function planWatchFill(current, fields) {
+  const fill = [];
+  const conflicts = [];
+  const missing = [];
+  for (const [id, label, unit] of WATCH_FIELDS) {
+    const watch = fields?.[id];
+    if (watch === null || watch === undefined || watch === '') {
+      missing.push(label);
+      continue;
+    }
+    const box = current[id] ?? { value: '', guess: false };
+    if (box.value === '' || box.guess) fill.push({ id, label, unit, value: watch });
+    else if (String(box.value).trim() !== String(watch)) conflicts.push({ id, label, current: box.value, watch });
   }
+  return { fill, conflicts, missing };
 }
 
-function shotsStatus() {
-  const statusNode = el('f-shots-status');
-  return (text) => {
-    if (!statusNode) return;
-    statusNode.style.display = 'block';
-    statusNode.textContent = text;
-  };
+const step = (done, text) => `<div class="read-step${done ? ' done' : ''}">${done ? '✓' : '<span class="spin"></span>'} ${text}</div>`;
+
+export function readPanelHtml(r) {
+  const label = h(r.label ?? 'screenshots');
+  if (r.phase === 'uploading') return `<div class="read-panel">${step(false, `Uploading ${label}…`)}</div>`;
+  if (r.phase === 'reading') {
+    return `<div class="read-panel">${step(true, `Uploaded ${label}`)}${step(false, 'Reading the numbers with the vision model…')}</div>`;
+  }
+  if (r.phase === 'error') {
+    return `<div class="read-panel">${step(true, `Uploaded ${label}`)}
+      <div class="read-step bad">✗ Could not read them: ${h(r.error ?? 'error')}. Fill the numbers in by hand.</div></div>`;
+  }
+  const { fill = [], conflicts = [], missing = [] } = r.plan ?? {};
+  const timing = r.model ? `<div class="small muted mono">${h(r.model)}${r.seconds != null ? ` · ${h(r.seconds)}s` : ''}</div>` : '';
+  const dateWarn = r.workoutDate && r.sessionDate && r.workoutDate !== r.sessionDate
+    ? `<div class="banner warn"><b>Different day.</b> The screenshot is from ${h(r.workoutDate)}, but this session is ${h(r.sessionDate)}. Check you picked the right workout before saving.</div>`
+    : '';
+  if (fill.length === 0 && conflicts.length === 0) {
+    return `<div class="read-panel">${step(true, `Uploaded ${label}`)}
+      <div class="read-step bad">✗ No numbers found on the screenshot.</div>
+      ${r.said ? `<div class="small muted">The model said: ${h(r.said)}</div>` : ''}${timing}</div>`;
+  }
+  const n = fill.length + conflicts.length;
+  const filled = fill.map((f) => `<li><b>${h(f.label)}</b> ${h(f.value)}${h(f.unit ?? '')}</li>`).join('');
+  const differs = conflicts.map((c) => `<li><b>${h(c.label)}</b> you have ${h(c.current)} · Watch says ${h(c.watch)}
+      <button class="btn sm ghost" type="button" data-action="use-watch-value" data-id="${h(c.id)}" data-value="${h(c.watch)}">Use ${h(c.watch)}</button></li>`).join('');
+  return `<div class="read-panel">${step(true, `Uploaded ${label}`)}${step(true, `Read ${n} value${n === 1 ? '' : 's'}`)}
+    ${dateWarn}
+    ${filled ? `<div class="small" style="margin-top:6px">Filled in:</div><ul class="read-list">${filled}</ul>` : ''}
+    ${differs ? `<div class="small" style="margin-top:6px">Already filled, kept yours:</div><ul class="read-list">${differs}</ul>` : ''}
+    ${missing.length ? `<div class="small muted">Not on the screenshot: ${h(missing.join(', '))}</div>` : ''}
+    ${timing}
+    <div class="small"><b>Check them, then Save.</b></div></div>`;
+}
+
+function showPanel(r) {
+  const node = el('f-read-panel');
+  if (node) node.innerHTML = readPanelHtml(r);
+}
+
+function currentBoxes() {
+  const out = {};
+  for (const [id] of WATCH_FIELDS) {
+    const node = el(`f-${id}`);
+    out[id] = { value: node?.value ?? '', guess: node?.dataset?.guess === '1' };
+  }
+  return out;
+}
+
+async function readAndFill(paths, label) {
+  showPanel({ phase: 'reading', label });
+  const started = Date.now();
+  try {
+    const { fields, model } = await store.readWatchShots(paths);
+    const plan = planWatchFill(currentBoxes(), fields ?? {});
+    for (const f of plan.fill) {
+      const node = el(`f-${f.id}`);
+      if (!node) continue;
+      node.value = String(f.value);
+      delete node.dataset.guess;
+      node.classList.add('from-watch');
+    }
+    showPanel({
+      phase: 'done', label, plan, model,
+      seconds: Math.round((Date.now() - started) / 1000),
+      said: fields?.said,
+      workoutDate: fields?.workout_date,
+      sessionDate: store.state.sessionDetail?.session?.date,
+    });
+  } catch (err) {
+    showPanel({ phase: 'error', label, error: err.message ?? 'error' });
+  }
 }
 
 async function offerEarlierShots(sessionId) {
@@ -450,24 +536,23 @@ export const actions = {
   'read-earlier-shots': async (node) => {
     if (!earlierShots) return;
     node.disabled = true;
-    const status = shotsStatus();
     const n = earlierShots.read.length + earlierShots.shrink.length;
     const label = `${n} screenshot${n === 1 ? '' : 's'}`;
     let paths = earlierShots.read;
     if (earlierShots.shrink.length > 0) {
-      status(`Preparing ${label}…`);
+      showPanel({ phase: 'uploading', label });
       try {
         const blobs = await Promise.all(earlierShots.shrink.map((p) => store.downloadShot(p)));
         const files = await Promise.all(blobs.map((b) => shrinkImage(b)));
         paths = await store.uploadSessionShots(store.state.sessionDetail.session.id, files);
       } catch (err) {
-        status(`Could not prepare the screenshots: ${err.message ?? 'error'}`);
+        showPanel({ phase: 'error', label, error: `could not prepare them: ${err.message ?? 'error'}` });
         node.disabled = false;
         return;
       }
     }
     pendingShotPaths.push(...paths);
-    await readAndFill(paths, label, status);
+    await readAndFill(paths, label);
     node.remove();
   },
 
@@ -503,9 +588,8 @@ export const actions = {
   'upload-watch-shots': async (node) => {
     const picked = Array.from(node.files ?? []);
     if (picked.length === 0) return;
-    const status = shotsStatus();
     const label = `${picked.length} screenshot${picked.length === 1 ? '' : 's'}`;
-    status(`Uploading ${label}…`);
+    showPanel({ phase: 'uploading', label });
 
     let paths;
     try {
@@ -513,11 +597,19 @@ export const actions = {
       paths = await store.uploadSessionShots(store.state.sessionDetail?.session?.id, files);
       pendingShotPaths.push(...paths);
     } catch (err) {
-      status(`Could not upload screenshot: ${err.message ?? 'error'}`);
-      toast(err.message ?? 'Could not upload screenshot', 'bad');
+      showPanel({ phase: 'error', label, error: `upload failed: ${err.message ?? 'error'}` });
       return;
     }
-    await readAndFill(paths, label, status);
+    await readAndFill(paths, label);
+  },
+
+  'use-watch-value': (node) => {
+    const input = el(`f-${node.dataset.id}`);
+    if (input) {
+      input.value = node.dataset.value;
+      input.classList.add('from-watch');
+    }
+    node.closest('li')?.remove();
   },
 
   'save-finish': async () => {
@@ -535,6 +627,7 @@ export const actions = {
         status: statusFor(detail, store.state.slots, store.state.rules),
         duration_min: num('duration_min'),
         calories: num('calories'),
+        total_calories: num('total_calories'),
         avg_hr: num('avg_hr'),
         peak_hr: num('peak_hr'),
         effort_1_10: num('effort_1_10'),
@@ -567,6 +660,13 @@ export async function mount(params = {}) {
   if (want && want !== have) {
     await store.loadSessionDetail(want);
     nav.refresh();
+  }
+  if (params.openFinish && store.state.sessionDetail?.session) {
+    delete params.openFinish;
+    pendingShotPaths = [];
+    const session = store.state.sessionDetail.session;
+    sheet(finishSheet(session));
+    offerEarlierShots(session.id);
   }
   if (params.watchPrefill && store.state.sessionDetail?.session) {
     const prefill = params.watchPrefill;
