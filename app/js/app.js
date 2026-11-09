@@ -11,9 +11,10 @@ import * as block from './screens-block.js';
 import * as progress from './screens-progress.js';
 import * as coach from './screens-coach.js';
 import * as journal from './screens-journal.js';
+import * as health from './screens-health.js';
 import * as settings from './screens-settings.js';
 
-const screens = { today, workout, block, progress, coach, journal, settings };
+const screens = { today, workout, block, progress, coach, journal, health, settings };
 
 let current = 'today';
 let params = {};
@@ -169,6 +170,9 @@ store.onAuth(async (user) => {
     }
     store.subscribeJobs(() => {
       if (current === 'coach' || current === 'block' || current === 'journal') render();
+    });
+    store.subscribeHealth(() => {
+      if (current === 'health') render();
     });
   } catch (err) {
     ui.toast(err.message ?? 'Could not load', 'bad');

@@ -59,6 +59,8 @@ export const state = {
   blockDetails: {},
   liftHistory: {},
   rulesSchema: null,
+  healthRuns: [],
+  healthSettings: null,
   pendingWrites: 0,
 };
 
@@ -120,6 +122,7 @@ export async function load() {
   const [
     documents, exercises, blocks, liftState, rotation,
     weeklyVolume, trainingRate, bodyTrend, sessions, jobs, notes, decisions, bodyMetrics, journal,
+    healthRuns, healthSettings,
   ] = await Promise.all([
     client().from('documents').select('*').order('version', { ascending: false }).then(rows),
     client().from('exercises').select('*').order('name').then(rows),
@@ -138,6 +141,11 @@ export async function load() {
     client().from('body_metrics').select('*').order('date', { ascending: false }).limit(120).then(rows),
     client().from('ai_jobs').select('*').eq('kind', 'ask').ilike('instructions', '%mode=journal%')
       .order('created_at', { ascending: false }).limit(200).then(rows),
+    // Optional: an older database without the health tables still loads.
+    client().from('health_runs').select('*').order('created_at', { ascending: false }).limit(20)
+      .then((r) => (r.error ? [] : r.data ?? [])),
+    client().from('health_settings').select('*').maybeSingle()
+      .then((r) => (r.error ? null : r.data)),
   ]);
 
   const latest = (key) => documents.find((d) => d.key === key) ?? null;
@@ -164,6 +172,8 @@ export async function load() {
     decisions,
     bodyMetrics,
     journal,
+    healthRuns,
+    healthSettings,
     blockDetails: {},
     liftHistory: {},
     loaded: true,
@@ -379,4 +389,41 @@ export function subscribeJobs(callback) {
     })
     .subscribe();
   return jobsChannel;
+}
+
+// ---------- Health check ----------
+
+/* request_health_run() checks the caller and throttles; the database trigger
+   then wakes the edge function. The app never inserts a run itself. */
+export async function requestHealthRun() {
+  const { error } = await client().rpc('request_health_run');
+  if (error) throw new Error(error.message);
+  await load();
+}
+
+export async function saveHealthSettings(settings) {
+  const { error } = await client().from('health_settings')
+    .upsert({ ...settings, user_id: state.user.id }, { onConflict: 'user_id' });
+  if (error) throw new Error(error.message);
+  await load();
+}
+
+let healthChannel = null;
+
+export function subscribeHealth(callback) {
+  if (healthChannel) {
+    client().removeChannel(healthChannel).catch(() => {});
+    healthChannel = null;
+  }
+  healthChannel = client().channel('health_runs')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'health_runs' }, (payload) => {
+      const row = payload.new ?? payload.old;
+      if (!row) return;
+      const runs = state.healthRuns.filter((r) => r.id !== row.id);
+      if (payload.eventType !== 'DELETE') runs.unshift(row);
+      state.healthRuns = runs.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+      callback(row);
+    })
+    .subscribe();
+  return healthChannel;
 }

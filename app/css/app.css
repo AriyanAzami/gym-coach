@@ -558,7 +558,7 @@ table.vol tr.short td { color: var(--warn); font-weight: 600; }
   max-width: 560px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   padding: 4px 6px;
 }
 .tab {
@@ -934,3 +934,26 @@ button.cal-day:hover {
 .chart .bar-status { fill: var(--muted); font-size: 9px; font-weight: 600; }
 .chart .bar-status.short { fill: var(--warn); }
 .chart .bar-row:hover .bar-fill { opacity: 0.82; }
+
+.pill.ok {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.pill.warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.pill.bad {
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.finding {
+  border-left: 3px solid var(--warn);
+  padding: 6px 0 6px 10px;
+  margin: 8px 0;
+}
+.finding.bad { border-left-color: var(--bad); }
+.finding-title { font-weight: 600; }

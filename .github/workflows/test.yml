@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Weekly, so the health check's repo finding reflects today's dependencies even
+  # in a week with no pushes. This workflow holds no secrets.
+  schedule:
+    - cron: '0 6 * * 1'
 
 permissions:
   contents: read
