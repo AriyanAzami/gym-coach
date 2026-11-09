@@ -3,7 +3,7 @@
    is asked of a model. */
 
 import * as store from './store.js';
-import { h, cleanText, fmtLoad, fmtDate, fmtRest, toast, sheet, closeSheet, el } from './ui.js';
+import { h, cleanText, fmtLoad, fmtDate, fmtRest, toast, sheet, closeSheet, el, singleFlight } from './ui.js';
 import { nav } from './nav.js';
 import { planForDay, volumeVsTarget, ymd, isoWeekStart, nextDayIndex } from './engine.js';
 
@@ -235,7 +235,7 @@ async function startSession() {
 }
 
 export const actions = {
-  'start-session': startSession,
+  'start-session': singleFlight(startSession),
   'resume-session': (node) => nav.go('workout', { sessionId: node.dataset.id }),
   'log-weight': () => sheet(weightSheet()),
   'save-weight': async () => {

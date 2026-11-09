@@ -61,6 +61,17 @@ function fmtMonthTitle(ym) {
   return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
+const RANK = { done: 0, partial: 1, planned: 3, skipped: 4 };
+const rank = (s) => (s.kind === 'rest' ? 2 : RANK[s.status] ?? 5);
+
+/* The session that stands for a day. A double tap can leave an empty planned
+   twin beside the real one, so the day is whichever got furthest. */
+export function sessionForDate(sessions, date) {
+  return (sessions ?? [])
+    .filter((s) => s.date === date)
+    .sort((a, b) => rank(a) - rank(b))[0] ?? null;
+}
+
 function calendarCard(ym) {
   const sessions = store.state.sessions ?? [];
   const [year, month] = String(ym).split('-').map(Number);
@@ -71,11 +82,8 @@ function calendarCard(ym) {
 
   const byDate = new Map();
   for (const s of sessions) {
-    if (!s.date || !String(s.date).startsWith(ym)) continue;
-    const prev = byDate.get(s.date);
-    if (!prev || (s.kind === 'training' && s.status === 'done')) {
-      byDate.set(s.date, s);
-    }
+    if (!s.date || !String(s.date).startsWith(ym) || byDate.has(s.date)) continue;
+    byDate.set(s.date, sessionForDate(sessions, s.date));
   }
 
   let trainedCount = 0;
@@ -386,7 +394,7 @@ export const actions = {
   },
   'view-day': async (node) => {
     const date = node.dataset.date;
-    const session = (store.state.sessions ?? []).find((s) => s.date === date);
+    const session = sessionForDate(store.state.sessions, date);
     if (!session) return;
     sheet(`<div class="eyebrow">${fmtDate(date)}</div><h2>Loading workout…</h2>`);
     try {

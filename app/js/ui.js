@@ -388,3 +388,21 @@ export async function shrinkImage(file, maxSide = 1600, quality = 0.82) {
     return file;
   }
 }
+
+/* Wraps an async action so a second tap while the first is still running gets
+   the same result instead of doing the work twice. */
+export function singleFlight(fn) {
+  let running = null;
+  return (...args) => {
+    if (!running) {
+      let result;
+      try {
+        result = fn(...args);
+      } catch (err) {
+        result = Promise.reject(err);
+      }
+      running = Promise.resolve(result).finally(() => { running = null; });
+    }
+    return running;
+  };
+}

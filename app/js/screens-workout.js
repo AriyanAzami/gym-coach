@@ -171,6 +171,7 @@ export function finishSheet(session, prefill = {}) {
         </div>
       </details>
       <div id="f-shots-status" class="small muted" style="margin-top:6px;display:none"></div>
+      <div id="f-earlier-shots"></div>
     </div>
 
     <div class="grid2">
@@ -308,6 +309,58 @@ export function applyParsedWatch(parsed) {
   return filled;
 }
 
+// The read-watch-shots function reads a ~150 KB JPEG in seconds and a full-size
+// PNG in ~25; anything over this is shrunk on the phone first.
+const READ_AS_IS_BYTES = 400_000;
+
+export function planEarlierShots(folder, files) {
+  const images = (files ?? []).filter((f) => /\.(jpe?g|png|heic|webp)$/i.test(f.name ?? ''));
+  const small = images.filter((f) => (f.metadata?.size ?? Infinity) <= READ_AS_IS_BYTES);
+  const pick = small.length > 0 ? small : images;
+  const paths = pick.map((f) => `${folder}/${f.name}`);
+  return small.length > 0 ? { read: paths, shrink: [] } : { read: [], shrink: paths };
+}
+
+let earlierShots = null;
+
+async function readAndFill(paths, label, status) {
+  status(`Reading ${label}…`);
+  try {
+    const { fields } = await store.readWatchShots(paths);
+    const count = applyParsedWatch(fields ?? {});
+    status(count > 0
+      ? `✓ Filled ${count} field${count === 1 ? '' : 's'} from ${label} — check them, then Save`
+      : `✓ ${label} attached, but no numbers could be read — fill them in by hand`);
+    toast(count > 0 ? `Filled ${count} field${count === 1 ? '' : 's'}` : 'No numbers found', count > 0 ? undefined : 'bad');
+  } catch (err) {
+    status(`✓ ${label} attached. Could not read them (${err.message ?? 'error'}) — fill the numbers in by hand`);
+  }
+}
+
+function shotsStatus() {
+  const statusNode = el('f-shots-status');
+  return (text) => {
+    if (!statusNode) return;
+    statusNode.style.display = 'block';
+    statusNode.textContent = text;
+  };
+}
+
+async function offerEarlierShots(sessionId) {
+  earlierShots = null;
+  try {
+    const { folder, files } = await store.listSessionShots(sessionId);
+    const plan = planEarlierShots(folder, files);
+    const n = plan.read.length + plan.shrink.length;
+    const slot = el('f-earlier-shots');
+    if (n === 0 || !slot) return;
+    earlierShots = plan;
+    slot.innerHTML = `<button class="btn sm full" type="button" data-action="read-earlier-shots" style="margin-top:8px">Read ${n} screenshot${n === 1 ? '' : 's'} uploaded earlier</button>`;
+  } catch {
+    // Offline or no folder yet: the upload button still works.
+  }
+}
+
 export const actions = {
   'done-all': async () => logPrescribed(store.state.sessionDetail.exercises),
 
@@ -389,7 +442,33 @@ export const actions = {
 
   'finish-session': () => {
     pendingShotPaths = [];
-    sheet(finishSheet(store.state.sessionDetail.session));
+    const session = store.state.sessionDetail.session;
+    sheet(finishSheet(session));
+    offerEarlierShots(session.id);
+  },
+
+  'read-earlier-shots': async (node) => {
+    if (!earlierShots) return;
+    node.disabled = true;
+    const status = shotsStatus();
+    const n = earlierShots.read.length + earlierShots.shrink.length;
+    const label = `${n} screenshot${n === 1 ? '' : 's'}`;
+    let paths = earlierShots.read;
+    if (earlierShots.shrink.length > 0) {
+      status(`Preparing ${label}…`);
+      try {
+        const blobs = await Promise.all(earlierShots.shrink.map((p) => store.downloadShot(p)));
+        const files = await Promise.all(blobs.map((b) => shrinkImage(b)));
+        paths = await store.uploadSessionShots(store.state.sessionDetail.session.id, files);
+      } catch (err) {
+        status(`Could not prepare the screenshots: ${err.message ?? 'error'}`);
+        node.disabled = false;
+        return;
+      }
+    }
+    pendingShotPaths.push(...paths);
+    await readAndFill(paths, label, status);
+    node.remove();
   },
 
   'paste-watch': async () => {
@@ -424,39 +503,21 @@ export const actions = {
   'upload-watch-shots': async (node) => {
     const picked = Array.from(node.files ?? []);
     if (picked.length === 0) return;
-    const statusNode = el('f-shots-status');
-    const status = (text) => {
-      if (!statusNode) return;
-      statusNode.style.display = 'block';
-      statusNode.textContent = text;
-    };
-    const n = picked.length;
-    const shots = `${n} screenshot${n === 1 ? '' : 's'}`;
-    status(`Uploading ${shots}…`);
+    const status = shotsStatus();
+    const label = `${picked.length} screenshot${picked.length === 1 ? '' : 's'}`;
+    status(`Uploading ${label}…`);
 
-    const sessionId = store.state.sessionDetail?.session?.id;
     let paths;
     try {
       const files = await Promise.all(picked.map((f) => shrinkImage(f)));
-      paths = await store.uploadSessionShots(sessionId, files);
+      paths = await store.uploadSessionShots(store.state.sessionDetail?.session?.id, files);
       pendingShotPaths.push(...paths);
     } catch (err) {
       status(`Could not upload screenshot: ${err.message ?? 'error'}`);
       toast(err.message ?? 'Could not upload screenshot', 'bad');
       return;
     }
-
-    status(`Reading ${shots}…`);
-    try {
-      const { fields } = await store.readWatchShots(paths);
-      const count = applyParsedWatch(fields ?? {});
-      status(count > 0
-        ? `✓ Filled ${count} field${count === 1 ? '' : 's'} from ${shots} — check them, then Save`
-        : `✓ ${shots} attached, but no numbers could be read — fill them in by hand`);
-      toast(count > 0 ? `Filled ${count} field${count === 1 ? '' : 's'}` : 'No numbers found', count > 0 ? undefined : 'bad');
-    } catch (err) {
-      status(`✓ ${shots} attached. Could not read them (${err.message ?? 'error'}) — fill the numbers in by hand`);
-    }
+    await readAndFill(paths, label, status);
   },
 
   'save-finish': async () => {

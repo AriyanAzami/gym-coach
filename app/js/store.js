@@ -446,3 +446,20 @@ export async function readWatchShots(paths) {
   if (!response.ok) throw new Error(body.error ?? `could not read the screenshots (${response.status})`);
   return body;
 }
+
+/* Screenshots already in a session's folder, including ones uploaded before
+   the form could read them. */
+export async function listSessionShots(sessionId) {
+  const userId = state.user?.id;
+  if (!userId || !sessionId) return { folder: null, files: [] };
+  const folder = `${userId}/${sessionId}`;
+  const { data, error } = await client().storage.from('shots').list(folder, { limit: 20 });
+  if (error) throw error;
+  return { folder, files: data ?? [] };
+}
+
+export async function downloadShot(path) {
+  const { data, error } = await client().storage.from('shots').download(path);
+  if (error) throw error;
+  return data;
+}
