@@ -14,3 +14,8 @@ major_version = 17
 
 [functions.dispatch-job]
 verify_jwt = true
+
+# Called by the database (a pg_net trigger), which has no user token. The guard
+# is the claim: the function only acts on a run that is still queued.
+[functions.health-check]
+verify_jwt = false

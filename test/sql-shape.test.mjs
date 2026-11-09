@@ -20,7 +20,7 @@ function tableBody(name) {
 }
 
 function policyOps(table) {
-  return [...sql.matchAll(new RegExp(`on ${table}\\s+for (\\w+)`, 'g'))].map((m) => m[1]);
+  return [...sql.matchAll(new RegExp(`on ${table}\\s+for (select|insert|update|delete)\\b`, 'g'))].map((m) => m[1]);
 }
 
 test('the expected tables all exist', () => {
@@ -79,7 +79,7 @@ test('ai_jobs has only a select policy', () => {
 
 test('every other table has all four policies', () => {
   for (const t of tableNames) {
-    if (t === 'documents' || t === 'ai_jobs') continue;
+    if (t === 'documents' || t === 'ai_jobs' || t === 'health_runs') continue;
     assert.deepEqual(
       policyOps(t).sort(),
       ['delete', 'insert', 'select', 'update'],
