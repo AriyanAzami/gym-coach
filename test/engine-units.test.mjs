@@ -65,3 +65,10 @@ test('incrementFor throws when the rules carry no increments at all', () => {
   const ex = { equipment: 'barbell', increment: null, unit: null };
   assert.throws(() => incrementFor(ex, { progression: {} }), /increment/i);
 });
+
+test('addIncrement does not invent a plate: 5 lb onto a kg load adds 2.27 kg', () => {
+  assert.deepEqual(
+    addIncrement({ value: 60, unit: 'kg' }, { value: 5, unit: 'lb' }),
+    { value: 62.27, unit: 'kg' },
+  );
+});

@@ -129,9 +129,9 @@ test('the expected views all exist', () => {
 });
 
 function viewBody(name) {
-  const m = sql.match(new RegExp(`create (?:or replace )?view ${name}[\\s\\S]*?;\\n`));
-  assert.ok(m, `view ${name} not found`);
-  return m[0];
+  const all = [...sql.matchAll(new RegExp(`create (?:or replace )?view ${name}[\\s\\S]*?;\\n`, 'g'))];
+  assert.ok(all.length > 0, `view ${name} not found`);
+  return all[all.length - 1][0];
 }
 
 test('the derived views all exist', () => {
@@ -195,4 +195,12 @@ test('lift_history counts only logged sets of completed training sessions', () =
 
 test('the shots bucket is created private', () => {
   assert.match(sql, /insert into storage\.buckets \(id, name, public\)\s*values \('shots', 'shots', false\)/);
+});
+
+test('rotation_next has no built-in complete_fraction fallback', () => {
+  const body = viewBody('rotation_next');
+  assert.match(body, /create or replace view rotation_next/, 'latest definition is not the 0009 replacement');
+  assert.doesNotMatch(body, /coalesce\([^)]*complete_fraction/);
+  assert.doesNotMatch(body, /coalesce\(f\.cf/);
+  assert.doesNotMatch(body, /(?<![\w.'])0\.\d+/);
 });

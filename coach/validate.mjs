@@ -80,6 +80,7 @@ export function validateBlock(plan, context) {
   const maxExercises = rules.session.max_exercises;
   const restBounds = rules.session.rest_s;
   const banned = new Set(rules.constraints.banned_movement_tags ?? []);
+  const unavailable = new Set(rules.constraints.equipment_unavailable ?? []);
   const placement = rules.warmup.core_mobility_placement;
 
   for (const day of plan.days) {
@@ -118,6 +119,12 @@ export function validateBlock(plan, context) {
           add(`${where} slot ${s.position} uses "${s.exercise}", which is tagged ${tag}, `
             + 'and that tag is banned by rules.constraints.banned_movement_tags.');
         }
+      }
+
+      const equipment = known?.equipment ?? s?.new?.equipment;
+      if (equipment && unavailable.has(equipment)) {
+        add(`${where} slot ${s.position} uses "${s.exercise}", which needs ${equipment}, `
+          + 'and that equipment is listed in rules.constraints.equipment_unavailable.');
       }
 
       // 6. Rest within the rules.

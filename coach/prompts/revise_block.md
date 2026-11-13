@@ -22,7 +22,7 @@ not a diff.
 - Keep everything the owner did not ask you to change, including exercise order,
   non-negotiables and cut order, unless the requested change forces it.
 - The revision must still satisfy every rule the original had to: the per-day
-  exercise cap, rest bounds, banned movement tags, weekly volume minimums at the
+  exercise cap, rest bounds, banned movement tags, unavailable equipment, weekly volume minimums at the
   observed `training_rate`, and the priority order.
 
 ## The rationale

@@ -30,7 +30,8 @@ Write `work/output.json`: one block, matching `coach/schema/block.schema.json`.
   equipment, movement tags, increment and increment unit.
 - Respect `rules.session.max_exercises` per day, the rest bounds in
   `rules.session.rest_s`, and every tag in
-  `rules.constraints.banned_movement_tags`.
+  `rules.constraints.banned_movement_tags`. Never use equipment listed in
+  `rules.constraints.equipment_unavailable`.
 - Meet `rules.volume.min_weekly_sets` for every muscle in `rules.priority`,
   judged at the rate in `training_rate` — the rate they actually train at, not
   the one the block assumes.

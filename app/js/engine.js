@@ -102,10 +102,24 @@ function openerFrom(exercise, similar, rules) {
 
   const nearest = candidates[0];
   if (!nearest) return { weight: null, unit: rules?.units?.weight ?? 'lb' };
-  return {
-    weight: round2(nearest.last_weight * rules.opener.fraction_of_similar),
-    unit: nearest.last_unit,
-  };
+  const raw = round2(nearest.last_weight * rules.opener.fraction_of_similar);
+  return { weight: loadable(raw, nearest.last_unit, exercise, rules), unit: nearest.last_unit };
+}
+
+/* Rounds down to a multiple of the exercise's own increment, never below one
+   increment. A rules gap leaves the raw value rather than crashing Today. */
+function loadable(raw, unit, exercise, rules) {
+  if (!(raw > 0)) return raw;
+  let step;
+  try {
+    const inc = incrementFor(exercise, rules);
+    step = toUnit(inc.value, inc.unit, unit);
+  } catch {
+    return raw;
+  }
+  if (!(step > 0)) return raw;
+  const multiples = Math.floor(raw / step + 1e-9);
+  return round2(Math.max(multiples, 1) * step);
 }
 
 /* One exact target for one slot. Double progression: clear the top of the range

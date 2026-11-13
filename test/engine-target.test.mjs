@@ -218,3 +218,46 @@ test('the slot rest and flags travel with the target', () => {
   assert.equal(t.notes, 'slow eccentric');
   assert.equal(t.flag, 'shoulder: stop at 8');
 });
+
+// ---- opener rounds down to a loadable weight ----
+
+const bar = (id, extra = {}) => ({
+  id, name: id, equipment: 'barbell', increment: null, unit: null,
+  load_mode: 'total', primary_muscle: 'chest', ...extra,
+});
+const sibling = (weight, unit = 'lb') => ({
+  exercise_id: 'ex-sib', primary_muscle: 'chest', equipment: 'barbell', load_mode: 'total',
+  last_weight: weight, last_unit: unit, last_date: '2026-10-01',
+});
+const opener = (exercise, similar) => nextTarget({
+  slot, exercise, state: { last_date: null }, similar, rules,
+});
+
+test('an opener is rounded down to a multiple of the increment', () => {
+  const t = opener(bar('ex-new'), [sibling(135)]);
+  assert.equal(t.weight, 90);
+  assert.equal(t.unit, 'lb');
+});
+
+test('an opener uses the exercise own increment', () => {
+  const t = opener(bar('ex-new', { increment: 2.5, unit: 'lb' }), [sibling(135)]);
+  assert.equal(t.weight, 92.5);
+});
+
+test('an opener converts the increment into the opener unit', () => {
+  const t = opener(bar('ex-new', { increment: 2, unit: 'kg' }), [sibling(100, 'kg')]);
+  assert.equal(t.weight, 70);
+  const lb = opener(bar('ex-new', { increment: 2.5, unit: 'kg' }), [sibling(200, 'lb')]);
+  assert.equal(lb.unit, 'lb');
+  assert.ok(lb.weight <= 140);
+});
+
+test('an opener never rounds below one increment', () => {
+  const t = opener(bar('ex-new'), [sibling(5)]);
+  assert.equal(t.weight, 5);
+});
+
+test('an opener keeps the raw value when the rules have no increment', () => {
+  const t = opener(bar('ex-new', { equipment: 'sled' }), [{ ...sibling(135), equipment: 'sled' }]);
+  assert.equal(t.weight, 94.5);
+});

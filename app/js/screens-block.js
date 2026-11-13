@@ -5,7 +5,7 @@
 import * as store from './store.js';
 import { h, cleanText, markdown, fmtRest, fmtDuration, fmtTokens, extractJobMeta, encodeJobPrompt, toast, sheet, closeSheet, confirm, el } from './ui.js';
 import { nav } from './nav.js';
-import { plannedWeeklyVolume } from './engine.js';
+import { plannedWeeklyVolume, ymd } from './engine.js';
 
 const BLOCK_KINDS = ['block', 'revise_block'];
 
@@ -212,6 +212,8 @@ async function submit(kind, targetBlockId) {
   nav.refresh();
 }
 
+export const activationRow = (today) => ({ status: 'active', starts_on: today });
+
 export const actions = {
   'generate-block': () => sheet(generateSheet()),
 
@@ -237,7 +239,7 @@ export const actions = {
       if (previous) {
         await store.write({ table: 'blocks', action: 'update', id: previous.id, row: { status: 'archived' } });
       }
-      await store.write({ table: 'blocks', action: 'update', id, row: { status: 'active' } });
+      await store.write({ table: 'blocks', action: 'update', id, row: activationRow(ymd(new Date())) });
       await store.load();
       store.state.blockDetails = {};
       await mount();

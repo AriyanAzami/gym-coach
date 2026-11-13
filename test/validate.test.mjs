@@ -272,3 +272,30 @@ test('failures are numbered so the model can work through them', () => {
 test('a context with no rules fails rather than passing everything', () => {
   assert.ok(errorsOf(validPlan(), { exercises: EXERCISES, training_rate: null }).length > 0);
 });
+
+// ---- unavailable equipment ----
+
+test('equipment the rules mark unavailable fails and names the rule', () => {
+  const ctx = context();
+  ctx.rules.constraints.equipment_unavailable = ['cable'];
+  const out = joined(validPlan(), ctx);
+  assert.match(out, /Lat pulldown/);
+  assert.match(out, /equipment_unavailable/);
+});
+
+test('unavailable equipment on a new exercise is caught too', () => {
+  const ctx = context();
+  ctx.rules.constraints.equipment_unavailable = ['kettlebell'];
+  const plan = mutate((p) => {
+    p.days[1].slots[0] = slot(0, 'Kettlebell swing', {
+      new: { primary_muscle: 'legs', secondary_muscles: [], equipment: 'kettlebell', movement_tags: [], increment: 5, increment_unit: 'lb' },
+    });
+  });
+  assert.match(joined(plan, ctx), /equipment_unavailable/);
+});
+
+test('an empty equipment_unavailable list fails nothing', () => {
+  const ctx = context();
+  ctx.rules.constraints.equipment_unavailable = [];
+  assert.doesNotMatch(joined(validPlan(), ctx), /equipment_unavailable/);
+});

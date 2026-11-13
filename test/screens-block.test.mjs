@@ -144,3 +144,8 @@ test('rendering never throws with no rules and no details loaded', () => {
   reset({ rules: null, blockDetails: {}, trainingRate: null });
   assert.doesNotThrow(() => render());
 });
+
+test('activationRow sets active status and the start date', async () => {
+  const { activationRow } = await import('../app/js/screens-block.js');
+  assert.deepEqual(activationRow('2026-11-02'), { status: 'active', starts_on: '2026-11-02' });
+});
