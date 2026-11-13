@@ -44,16 +44,22 @@ app/                  static PWA, no build step (GitHub Pages)
   css/app.css
   js/config.js        Supabase URL + anon key (public identifiers)
   js/engine.js        ES module, pure functions: targets, volume, rotation
-  js/store.js         Supabase client, auth, queries, realtime, offline outbox
-  js/ui.js  js/app.js  js/charts.js
-  js/screens-*.js     today, workout, block, progress, coach, settings
+  js/store.js         Supabase client, auth, queries, realtime, saved snapshot
+  js/outbox.js        durable queue of writes
+  js/ui.js            shared widgets: rest timer, wake lock, sheets
+  js/app.js  js/nav.js  js/charts.js  js/rules-check.js
+  js/screens-*.js     today, workout, block, progress, coach, journal,
+                      health, settings
+  schema/rules.schema.json   byte-identical copy of the coach schema
   vendor/supabase.js  vendored @supabase/supabase-js UMD
 coach/                AI runner (Node, runs only in the Action)
-  context.mjs  validate.mjs  save.mjs  lib/db.mjs
-  prompts/{block,revise_block,checkin,ask}.md
+  context.mjs  validate.mjs  save.mjs  fail.mjs
+  lib/{db,classify,rules,stale}.mjs
+  prompts/{block,revise_block,checkin,ask,journal}.md
   schema/{rules,block}.schema.json
 supabase/
-  config.toml  migrations/*.sql  functions/dispatch-job/index.ts
+  config.toml  migrations/<timestamp>_NNNN_name.sql
+  functions/{dispatch-job,health-check,read-watch-shots}
   seed/rules.example.json        fabricated values only
 migrate/              one-off Notion import; out/ is gitignored
   normalize.mjs  load.mjs  verify.mjs
@@ -72,6 +78,10 @@ docs/                 spec.md  plan.md  claude-project-instructions.md
 - **Node:** 24 (`node --test`, no test framework). Runtime dependencies for
   `coach/` and `migrate/`: `@supabase/supabase-js`, `ajv`, `ajv-formats`.
   `package-lock.json` is committed; the Action runs `npm ci`.
+- **Migrations** are named `<timestamp>_NNNN_name.sql`. The timestamp is the
+  version Supabase records in its migration history, and `db push` refuses to
+  run unless the files match that history. The files sort in the same order as
+  the `NNNN` sequence.
 - **Supabase CLI** via `npx supabase`. `db push` and `functions deploy` need no
   Docker (`functions deploy` uses the API bundler); local `functions serve`
   would, and is not part of the workflow.
@@ -197,7 +207,8 @@ not anyone's programme:**
     "increments": { "barbell": 5, "dumbbell": 5, "machine": 10, "cable": 5 },
     "increment_unit": "lb",
     "most_recent_entry_decides": true,   // the last logged exposure, not the best
-    "partials_count": false
+    "partials_count": false,
+    "backoff": { "below_min_fraction": 0.5, "label": "backed off" }  // optional
   },
   "stall": {
     "sessions_to_trigger": 3,
@@ -236,7 +247,7 @@ not anyone's programme:**
 }
 ```
 
-The schema makes all twelve sections and every key above `required`, forbids
+`progression.backoff` is optional; see §5. The schema makes all twelve sections and every key above `required`, forbids
 `additionalProperties`, and bounds the numbers (positive increments, fractions
 in `[0,1]`, rep and rest ranges ordered). A rules document that fails the schema
 is never stored and never reaches a job.
@@ -270,10 +281,20 @@ For each slot, one exact target:
    derive from. Always labelled with `rules.opener.label`.
 4. **Flagged** — an exercise with `exercises.flag` set surfaces that text at the
    top of the card.
+5. **Back-off** (only when `rules.progression.backoff` exists) — when at least
+   `below_min_fraction` of the last exposure's working sets fell below
+   `rep_min`, the next target drops one increment and restarts at `rep_min`,
+   labelled with `backoff.label`.
+
+**Deload due.** When the deload triggers in `rules.deload` fire, Today shows a
+"Deload due" banner that queues a `block` job asking for a one-week deload
+block. A block plan may carry `"deload": true`; `validate.mjs` then scales the
+weekly volume minimums by `rules.deload.set_factor`.
 
 Output card: day name, warm-up note, then each exercise as
 `sets × reps @ target`, with its rest, the last logged numbers beside it,
-non-negotiables named, and the cut order shown. Pressing it creates a `planned`
+non-negotiables named, and the cut order shown. An open session
+shows as an "Unfinished workout" card. Pressing the day creates a `planned`
 session and writes one `session_exercises` row per slot holding the computed
 targets, so the plan the owner saw is the plan that gets logged against.
 
@@ -288,9 +309,26 @@ targets, so the plan the owner saw is the plan that gets logged against.
   `partial` by the same completeness rule `rotation_next` uses.
 - Views recompute on read, so the next target is correct the moment a set is
   saved.
-- **Offline:** writes go through an outbox in `localStorage`; `store.js` flushes
-  it on reconnect and on load. The last rendered Today card is cached too, so
-  the app opens useful without a network.
+- **Rest timer:** starts from the exercise's rest value, also by itself after
+  an exercise is logged. It beeps at zero (the audio context is unlocked by the
+  tap that starts it, because iOS requires a gesture) and shows "Rest done".
+  While a workout is open the screen wake lock is held and re-requested when
+  the page becomes visible again.
+- **Offline and failure handling:**
+  - Every write goes through the outbox in `localStorage`, and an inserted row
+    carries an id made on the phone, so a logged set shows on screen at once,
+    before the server confirms it. `store.js` flushes the outbox on load and on
+    reconnect.
+  - Database (`/rest/v1/`) calls time out after 15 seconds so a hung request
+    falls back to the outbox. Storage and function calls are left alone.
+  - A write the database rejects (as opposed to a network failure) is kept in a
+    "not saved" list with **Retry** and **Discard**; it is never dropped
+    without the owner's say-so.
+  - The app saves a snapshot of the last loaded state on the phone
+    (history-sized lists are left out). It renders that snapshot first, before
+    any network call, so it opens on today's plan and the open workout offline
+    and on a cold start. Fresh server rows are merged with writes still in the
+    outbox.
 
 ## 7. Pipeline C — AI jobs
 
@@ -325,8 +363,25 @@ concurrency: { group: coach }
 timeout-minutes: 25
 ```
 
-Steps: checkout → Node 24 → `npm ci` → `npm i -g @anthropic-ai/claude-code` →
-`context.mjs` → `claude -p` → `save.mjs`.
+Concurrency is per job id (`coach-<job_id>`), so a pending run is never
+cancelled in favour of another job's.
+
+Steps: checkout → Node 24 → `npm ci` → `npm i -g @anthropic-ai/claude-code`
+(pinned to an exact version) → `context.mjs` → choose prompt, model and effort
+→ `claude -p` → restore the checkout → `save.mjs` → `fail.mjs` (only on
+failure or cancel).
+
+- Supabase secrets are present only on the context, save and fail steps. The
+  `claude` step holds only the Claude token.
+- The model may write only under `work/` (`Edit(work/**)`), so it cannot
+  change the validator or the scripts.
+- The restore step runs `git checkout -- .`, `git clean` (keeping `work/`) and
+  `npm ci --ignore-scripts` before the secrets come back, and runs even when
+  an earlier step failed.
+- `fail.mjs` closes a job whose earlier step died, with a reason picked from a
+  fixed list of phrases by `lib/classify.mjs`; no log text is stored.
+- A sweep marks jobs still `queued` or `running` more than 40 minutes after
+  creation as `failed` (`lib/stale.mjs`; the workflow is cut off at 25).
 
 **`context.mjs <job_id>`** marks the job `running` and writes `work/context.json`
 with the service-role key: current rules and manual, the last eight weeks of
@@ -351,7 +406,7 @@ claude -p "$(cat coach/prompts/$KIND.md)" \
   --model "$MODEL" \
   --max-turns 40 \
   --tools "Read,Write,Edit,Bash" \
-  --allowedTools "Read" "Write" "Edit" "Bash(node coach/validate.mjs:*)" \
+  --allowedTools "Read" "Edit(work/**)" "Bash(node coach/validate.mjs:*)" \
   --disallowedTools "mcp__*" "WebFetch" "WebSearch" \
   > work/claude.log 2>&1
 ```
@@ -419,21 +474,56 @@ Workflow logs on a public repository are world-readable, so:
 - Triggers are `repository_dispatch` (type `coach-job`) and `workflow_dispatch`
   only. No `pull_request_target`, no `issue_comment`, no `schedule` — forks and
   outside contributors never reach a secret.
-- `permissions: contents: read`, one concurrency group, 25-minute timeout.
+- `permissions: contents: read`, a concurrency group per job id, 25-minute
+  timeout.
+
+---
+
+### Pipeline D — health check and watch reader (edge functions)
+
+Both functions call NVIDIA's API with a key held as the `NVIDIA_API_KEY`
+Supabase secret.
+
+**`health-check`** is woken by the database with a run id and nothing else. The
+app can only read `health_runs`; it asks for a run through
+`request_health_run()`, which checks the caller and throttles, and edits its own
+`health_settings` row (cadence, weekday, hour, timezone, primary and fallback
+model). A scheduled job inside the database wakes the function hourly and the
+settings decide whether a run is due. The function claims the run
+(`queued` → `running`), answers at once and works in the background:
+deterministic checks over the rules, sessions, sets, views, block and recent job
+statuses are saved first; then a model gives a second opinion, with a fallback
+model if the primary fails. A model failure never fails the run; `ai_error`
+says what went wrong. The model receives only structured numbers: the rules,
+exercise names with muscles and equipment, sessions and sets, the views, the
+block and the checker's findings. It receives no manual, notes or journal text.
+Every read filters on the run's `user_id`, because the service-role client
+bypasses RLS.
+
+**`read-watch-shots`** is called by the signed-in app. The caller names storage
+paths; the function checks each lies in the caller's own folder, reads them,
+sends the images to a vision model (with a second as fallback) and returns the
+numbers for the finish sheet. It writes nothing; the owner still presses Save.
 
 ---
 
 ## 8. App screens
 
-Mobile-first, dark-mode aware, installable. Email + password sign-in only.
+Mobile-first, dark-mode aware, installable. Email + password sign-in only. A
+"not saved" banner lists rejected writes with Retry and Discard.
+
+`pages.yml` runs `npm test` before it deploys, and bumping `VERSION` in `sw.js`
+makes installed phones take the new shell.
 
 | Screen | Contents |
 | :-- | :-- |
-| Today | the computed plan, start/resume, week counters, quick body log |
-| Workout | per-exercise logging, done-as-prescribed, rest timer, finish sheet, Apple Watch text import and screenshot upload |
+| Today | the computed plan, start/resume, "Unfinished workout" and "Deload due" cards, week counters, quick body log |
+| Workout | per-exercise logging, skip, done-as-prescribed, rest timer with beep and auto-start, screen wake lock, finish sheet, Apple Watch text import and screenshot upload and read |
 | Block | active block, drafts with rationale and volume table, generate and revise |
 | Progress | lift charts from `lift_history`, weekly volume against target, body-weight trend |
 | Coach | notes, check-ins, ask, model and effort per job, job history with live status |
+| Journal | running conversation with the coach; read-only unless "Allow changes" is on for a message |
+| Health | scheduled and on-demand system check: schedule, models, findings by area and severity |
 | Settings | rules editor with schema validation and version history/rollback, manual editor, exercises list/edit, sign out |
 
 ---

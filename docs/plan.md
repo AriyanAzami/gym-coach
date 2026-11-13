@@ -86,7 +86,7 @@ git add -A && git commit -m "chore: clear the repo and scaffold the rebuild"
 ### Task 2: Tables, RLS and the one-active-block rule
 
 **Files:**
-- Create: `supabase/config.toml`, `supabase/migrations/0001_tables.sql`
+- Create: `supabase/config.toml`, `supabase/migrations/20261106215343_0001_tables.sql`
 - Test: `test/sql-shape.test.mjs`
 
 **Interfaces:**
@@ -96,7 +96,7 @@ git add -A && git commit -m "chore: clear the repo and scaffold the rebuild"
 
 `project_id = "gym-coach"`, `[auth] enable_signup = false`, `[db] major_version = 17`.
 
-- [ ] **Step 2: Write `0001_tables.sql`**
+- [ ] **Step 2: Write `20261106215343_0001_tables.sql`**
 
 In order: `create extension if not exists pgcrypto`; the 12 tables of spec §2, each with `id uuid primary key default gen_random_uuid()` and `user_id uuid not null references auth.users(id) on delete cascade default auth.uid()`; the unit `check` on every weight column; `exercises.load_mode text not null default 'total' check (load_mode in ('total','per_hand'))`; `create unique index blocks_one_active on blocks(user_id) where status = 'active'`; then for each table `alter table … enable row level security` and four policies (`select`, `insert`, `update`, `delete`) `using (user_id = auth.uid()) with check (user_id = auth.uid())` — **except** `documents`, which gets `select` and `insert` only, and `ai_jobs`, which gets `select` only.
 
@@ -130,13 +130,13 @@ git add -A && git commit -m "feat: schema with RLS on every table"
 ### Task 3: Lift views
 
 **Files:**
-- Create: `supabase/migrations/0002_lift_views.sql`
+- Create: `supabase/migrations/20261106215401_0002_lift_views.sql`
 - Modify: `test/sql-shape.test.mjs`
 
 **Interfaces:**
 - Produces: `current_documents(user_id, key, version, body_md, body_json)`, `lift_history`, `lift_exposures`, `lift_state(exercise_id, last_date, last_weight, last_unit, last_reps, sessions_since_change, stall_count, flag)`
 
-- [ ] **Step 1: Write `0002_lift_views.sql`**
+- [ ] **Step 1: Write `20261106215401_0002_lift_views.sql`**
 
 Every view `create view … with (security_invoker = true) as`.
 - `current_documents`: `distinct on (user_id, key) … order by user_id, key, version desc`.
@@ -165,12 +165,12 @@ git add -A && git commit -m "feat: lift history, exposures and lift state views"
 ### Task 4: Volume, rate, rotation and body views
 
 **Files:**
-- Create: `supabase/migrations/0003_derived_views.sql`
+- Create: `supabase/migrations/20261106215430_0003_derived_views.sql`
 
 **Interfaces:**
 - Produces: `weekly_muscle_volume(week_start, muscle, direct_sets, indirect_sets, total_sets)`, `training_rate(per_week_4w, per_week_8w)`, `rotation_next(day_index, day_id, reason)`, `body_trend(week_start, avg_weight, unit, rate_3w)`
 
-- [ ] **Step 1: Write `0003_derived_views.sql`**
+- [ ] **Step 1: Write `20261106215430_0003_derived_views.sql`**
 
 - `weekly_muscle_volume`: `date_trunc('week', sessions.date)` as `week_start`; direct sets counted against `exercises.primary_muscle`, indirect against `unnest(exercises.secondary_muscles)` multiplied by `(body_json->'volume'->>'indirect_factor')::numeric` read per user from `current_documents`; `coalesce` the factor to `0.5` **only** when no rules document exists yet, so a first run does not error.
 - `training_rate`: done training sessions in the trailing 28 and 56 days divided by 4 and 8.

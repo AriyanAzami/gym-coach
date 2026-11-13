@@ -45,11 +45,16 @@ Three tiers, by what they cost:
 ## Features
 
 - **Today.** The next day in your rotation, with an exact target for every
-  exercise, your last logged numbers beside each one, and the rest time.
+  exercise, your last logged numbers beside each one, and the rest time. An
+  "Unfinished workout" card appears while a session is still open. When a
+  deload is due, a "Deload due" banner offers to ask the coach for a one-week
+  deload block (see [below](#2-todays-plan-views-then-the-engine)).
 - **Workout.** Log a set in one tap ("done as prescribed"), or edit weight,
-  reps and partials per set. It has a rest timer and a finish sheet for
-  duration, calories, heart rate, HR zones, effort and pain. Logging works
-  offline and syncs when the connection comes back.
+  reps and partials per set. The rest timer beeps and shows "Rest done" at
+  zero, and starts by itself after you log an exercise. The screen stays on
+  while a workout is open. A finish sheet takes duration, calories, heart rate,
+  HR zones, effort and pain. Logging works offline and syncs when the
+  connection comes back.
 - **Apple Watch import.** Paste the text of an Apple Fitness workout summary,
   for example from iOS Live Text, and the finish sheet fills itself in. You can
   also open the app from an iOS Shortcut with `?watch=<text>` in the URL. Or
@@ -71,6 +76,12 @@ Three tiers, by what they cost:
   session and the earlier messages, and the whole history stays in the tab. It
   only reads unless you switch on "Allow changes" for that message, which lets
   it add notes and decisions or revise the rules and manual.
+- **Health.** A scheduled check of the whole system: training against the
+  rules, data quality, plumbing and the code. Pick a cadence, a day and hour
+  and the models, or tap Run now. Each run lists findings by area and severity.
+  Deterministic checks run first and are saved straight away, then a second
+  opinion from a model on NVIDIA's API adds more. The model gets only
+  structured numbers: no manual, notes or journal text.
 - **Settings.** A rules editor that validates against the schema, with full
   version history and one-tap rollback. Also an editor for the coaching manual
   and the exercise library.
@@ -123,14 +134,32 @@ today's date. For each slot in the day it works out one target:
 3. **No history.** A conservative opener, worked out as a fraction of the
    closest similar lift you have logged. It is always labelled as an opener.
 
+4. **Back-off (optional).** If the rules carry `progression.backoff` and at
+   least `below_min_fraction` of the last working sets fell below `rep_min`,
+   the next target drops one increment and restarts at the bottom of the
+   range, labelled with the rules' `backoff.label`.
+
 Starting the workout saves those targets with the session, so you log against
 exactly the plan you saw.
 
+**Deload.** When the deload triggers in the rules fire, Today shows a "Deload
+due" banner that asks the coach for a one-week deload block. A block plan may
+carry `"deload": true`, and the validator then scales its weekly volume
+minimums by `rules.deload.set_factor`.
+
 ### 3. Logging works offline
 
-Writes go to an outbox in `localStorage` first. The outbox is flushed when the
-app loads and whenever the connection returns. The last Today card is cached,
-so the app opens with something useful even with no signal at the gym.
+Writes go to an outbox in `localStorage` first, and a set you log shows on
+screen at once, before the server confirms it. The outbox is flushed when the
+app loads and whenever the connection returns.
+
+The app also saves a snapshot of its state on the phone. It opens on that
+snapshot offline and on a cold start, before any network call, so today's plan
+and the open workout are there even with no signal at the gym. Database calls
+time out after 15 seconds instead of hanging, and the write joins the outbox.
+A write the database rejects is different from a network failure: it goes to a
+"not saved" list with **Retry** and **Discard** buttons. It is never dropped
+silently.
 
 ### 4. An AI job from start to finish
 
@@ -191,7 +220,38 @@ The steps:
   you left empty. It never overwrites a number you typed.
 
 If anything fails, the job is marked `failed` and a short reason is written to
-the `ai_jobs` row, never to the log.
+the `ai_jobs` row, never to the log. A step that dies before `save.mjs` is
+closed out by [`coach/fail.mjs`](coach/fail.mjs), and jobs still queued or
+running 40 minutes after creation are swept as failed
+([`coach/lib/stale.mjs`](coach/lib/stale.mjs)), so the app never spins
+forever.
+
+The workflow is hardened further:
+
+- Secrets are set only on the context, save and fail steps. The step that runs
+  `claude` holds just the Claude token and no Supabase key.
+- The model can write only under `work/`. After it runs, the checkout is
+  restored (`git checkout`, `git clean`, `npm ci` from the lockfile) before
+  any Supabase secret comes back, so it can't have altered the validator or
+  the scripts.
+- Concurrency is per job id, so a pending run is never cancelled in favour of
+  another job's.
+- The Claude Code CLI is pinned to an exact version.
+
+### 5. The health check and the watch reader
+
+Two more edge functions call NVIDIA's API, with the key held as a Supabase
+secret.
+
+- **[`health-check`](supabase/functions/health-check/index.ts)** is woken by
+  the database (an hourly schedule, or Run now on the Health tab) with a run id
+  and nothing else. It runs deterministic checks and saves them, then asks a
+  model for a second opinion, falling back to a second model on failure. A
+  model failure never fails the run. The model sees only structured numbers.
+- **[`read-watch-shots`](supabase/functions/read-watch-shots/index.ts)** reads
+  the numbers off the Apple Watch screenshots you just uploaded, with a fast
+  vision model, and returns them to fill the finish sheet. It only reads paths
+  in your own storage folder and writes nothing.
 
 ## Security model
 
@@ -272,6 +332,10 @@ npm install
    npx supabase db push
    ```
 
+   Migrations are named `<timestamp>_NNNN_name.sql`. The timestamp is the
+   version Supabase records, so the files must match the project's migration
+   history exactly or `db push` refuses to run.
+
 ### 3. Point the app at your project
 
 > **Do this before you deploy.** [`app/js/config.js`](app/js/config.js) ships
@@ -315,10 +379,14 @@ npx supabase secrets set --env-file .env.dispatch
 npx supabase functions deploy dispatch-job
 ```
 
+The Health tab and the screenshot reader also need their functions
+(`health-check` and `read-watch-shots`) deployed and an `NVIDIA_API_KEY`
+Supabase secret. Both are optional: the rest of the app works without them.
+
 ### 5. Deploy the app
 
 In **Settings → Pages**, set the source to **GitHub Actions**. Every push to
-`main` that touches `app/` deploys it. The workflow's config check only
+`main` that touches `app/` runs the tests and deploys only if they pass. The workflow's config check only
 catches the literal `PROJECT_REF` placeholder. It **won't** catch a
 `config.js` that still points at the original project, so make sure you've
 done step 3. Open the Pages URL
@@ -382,18 +450,23 @@ python -m http.server 5173 --directory app      # serve the app locally
 ```
 app/                 the phone app: static PWA, no build step
   js/engine.js       pure progression maths: targets, volume, rotation
-  js/store.js        Supabase client, auth, realtime, offline outbox
-  js/screens-*.js    today, workout, block, progress, coach, settings
+  js/store.js        Supabase client, auth, realtime, saved snapshot
+  js/outbox.js       durable queue of writes
+  js/ui.js           shared widgets: rest timer, wake lock, sheets
+  js/screens-*.js    today, workout, block, progress, coach, journal,
+                     health, settings
   js/rules-check.js  dependency-free rules validator, shared with the Action
 coach/               the AI runner (runs only in the Action)
   context.mjs        builds work/context.json for a job
   validate.mjs       gates a block or rules document against the rules
   save.mjs           re-validates and stores the result
+  fail.mjs           closes a job out when an earlier step died
+  lib/               database client, failure classifier, stale-job sweep
   prompts/           one prompt per job kind
   schema/            JSON Schemas for rules and blocks
 supabase/
-  migrations/        tables, RLS, views
-  functions/         dispatch-job edge function
+  migrations/        tables, RLS, views, health (<timestamp>_NNNN_name.sql)
+  functions/         dispatch-job, health-check, read-watch-shots
   seed/              rules.example.json (fabricated values)
 migrate/             one-off Notion importer
 test/                node --test suites
