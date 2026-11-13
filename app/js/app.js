@@ -34,6 +34,7 @@ const actions = {
   },
   'go-tab': (node) => nav.go(node.dataset.tab),
   'retry-sync': async () => {
+    ui.closeSheet();
     const result = await store.flushOutbox();
     ui.toast(result.sent ? `${result.sent} saved` : 'Nothing saved yet — still no connection');
     render();

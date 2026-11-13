@@ -105,3 +105,21 @@ test('two outboxes over the same storage do not lose a write', () => {
   createOutbox({ storage }).queue(op(2));
   assert.deepEqual(createOutbox({ storage }).list().map((o) => o.row.set_no), [1, 2]);
 });
+
+test('a write queued while a flush is awaiting the network survives it', async () => {
+  const storage = fakeStorage();
+  const box = createOutbox({ storage });
+  box.queue(op(1));
+  await box.flush(async () => { box.queue(op(2)); });
+  assert.deepEqual(box.list().map((o) => o.row.set_no), [2]);
+});
+
+test('entries saved before queue ids existed get a stable one', () => {
+  const storage = fakeStorage({ 'gym-coach.outbox': JSON.stringify([{ table: 'sets', action: 'update', id: 'row-1', row: {} }]) });
+  const box = createOutbox({ storage });
+  const first = box.list()[0].qid;
+  assert.ok(first);
+  assert.equal(box.list()[0].qid, first);
+  box.discard(first);
+  assert.equal(box.size(), 0);
+});

@@ -119,8 +119,20 @@ export const signOut = () => {
   return client().auth.signOut();
 };
 
+/* Who is signed in. An access token that expired overnight cannot be refreshed
+   with no signal, and supabase-js then reports no session. That is not a
+   sign-out: when the refresh failed on the network and this phone holds a
+   snapshot, the app opens on it and the writes queue until the token refreshes. */
+export function pickUser(session, error, snap) {
+  if (session?.user) return session.user;
+  const network = error && (error.name === 'AuthRetryableFetchError'
+    || /fetch|network|load failed/i.test(String(error.message ?? '')));
+  return network && snap?.userId ? { id: snap.userId, offline: true } : null;
+}
+
 export function onAuth(callback) {
   let lastUserId;
+  let offlineUser = null;
   const notify = (user) => {
     state.user = user;
     const id = user?.id ?? null;
@@ -128,11 +140,21 @@ export function onAuth(callback) {
     lastUserId = id;
     callback(state.user);
   };
-  client().auth.getSession().then(({ data }) => {
-    notify(data.session?.user ?? null);
+  client().auth.getSession().then(({ data, error }) => {
+    const user = pickUser(data.session, error, readSnapshot());
+    if (user?.offline) offlineUser = user;
+    notify(user);
   });
-  client().auth.onAuthStateChange((_event, session) => {
-    notify(session?.user ?? null);
+  client().auth.onAuthStateChange((event, session) => {
+    if (session?.user) {
+      offlineUser = null;
+      notify(session.user);
+      // A refreshed token is what writes queued as "signed out" were waiting for.
+      if (outbox.size() > 0) flushOutbox().catch(() => {});
+    } else if (event === 'SIGNED_OUT' || !offlineUser) {
+      offlineUser = null;
+      notify(null);
+    }
   });
 }
 
@@ -194,7 +216,7 @@ function syncPending() {
    those are laid back over them; otherwise a session started offline would
    vanish from Today and could be started twice. */
 function replayQueued() {
-  for (const op of outbox.list()) mirror(state, op);
+  for (const op of outbox.list()) mirror(state, op, { replay: true });
 }
 
 /* With no network, the in-memory state is kept, or the snapshot restored on a
@@ -413,8 +435,10 @@ const SESSION_DEFAULTS = {
 
 /* Applies a write to the in-memory state the screens render from, so a set
    logged with no signal shows the moment it is tapped. Covers the open
-   workout, the session list and weigh-ins; everything else waits for a load. */
-export function mirror(s, op) {
+   workout, the session list and weigh-ins; everything else waits for a load.
+   A replay over freshly loaded rows only fills in the open workout; it never
+   makes a different session the open one. */
+export function mirror(s, op, { replay = false } = {}) {
   const list = Array.isArray(op.row) ? op.row : [op.row];
   const detail = s.sessionDetail;
   const merge = (arr, id, row) => {
@@ -439,6 +463,7 @@ export function mirror(s, op) {
       for (const row of list) {
         let d = s.sessionDetail;
         if (d?.session?.id !== row.session_id) {
+          if (replay) continue;
           const session = (s.sessions ?? []).find((x) => x.id === row.session_id);
           if (!session) continue;
           d = { session, exercises: [], sets: [] };
@@ -488,7 +513,19 @@ async function alreadyLanded(op) {
   return !error && (data ?? []).length === ids.length;
 }
 
+/* Thrown before anything is sent: with no session the request would go out as
+   anon, match no rows under RLS, and look like a success. */
+async function hasSession() {
+  try {
+    const { data } = await client().auth.getSession();
+    return Boolean(data?.session);
+  } catch {
+    return false;
+  }
+}
+
 async function send(op) {
+  if (!await hasSession()) throw new Error('signed out or token expired; waiting to retry');
   let result = await run(op);
   const errorOf = (r) => ({ ...r.error, status: r.status });
   if (result.error && classifyError(errorOf(result), op.action).kind === 'auth') {
@@ -504,6 +541,11 @@ async function send(op) {
       permanent: kind === 'permanent' || kind === 'duplicate',
       code: result.error.code,
     });
+  }
+  // An update that matched nothing changed nothing; usually the row's own
+  // insert is still queued or was rejected. Kept, so the edit is not lost.
+  if (op.action === 'update' && Array.isArray(result.data) && result.data.length === 0) {
+    throw Object.assign(new Error('the row to update is not in the database yet'), { permanent: true });
   }
   return result.data?.[0] ?? null;
 }

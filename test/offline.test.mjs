@@ -218,3 +218,14 @@ test('an action that rejects reports the error instead of failing silently', asy
   }
   assert.deepEqual(seen, ['no signal', 'sync boom']);
 });
+
+test('finishing a complete session moves Today to the next day before the server knows', async () => {
+  const { advanceRotation } = await import('../app/js/screens-workout.js');
+  const days = [{ id: 'd0', day_index: 0, name: 'Push' }, { id: 'd1', day_index: 1, name: 'Pull' }];
+  const rotation = { block_id: 'bl', day_index: 1, day_id: 'd1', day_name: 'Pull' };
+  const session = { block_id: 'bl', day_index: 1 };
+  assert.deepEqual(advanceRotation(rotation, days, session, 'done'),
+    { block_id: 'bl', day_index: 0, day_id: 'd0', day_name: 'Push' });
+  assert.equal(advanceRotation(rotation, days, session, 'partial'), rotation, 'an incomplete day repeats');
+  assert.equal(advanceRotation(rotation, days, { block_id: 'other', day_index: 1 }, 'done'), rotation);
+});

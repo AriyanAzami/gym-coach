@@ -5,7 +5,7 @@
 import * as store from './store.js';
 import { h, fmtLoad, fmtRest, toast, sheet, closeSheet, timer, el, q, shrinkImage } from './ui.js';
 import { nav } from './nav.js';
-import { sessionComplete, ymd, parseAppleWatchText } from './engine.js';
+import { sessionComplete, ymd, parseAppleWatchText, nextDayIndex } from './engine.js';
 
 const nameOf = (id) => store.state.exercises.find((e) => e.id === id)?.name ?? 'Unknown exercise';
 const exerciseOf = (id) => store.state.exercises.find((e) => e.id === id) ?? null;
@@ -249,6 +249,15 @@ async function reload() {
   } catch {
     // The screen already shows what was logged.
   }
+}
+
+/* The rotation after finishing a session, worked out on the phone. Only a
+   complete session of the active block moves it, the same rule the view uses. */
+export function advanceRotation(rotation, days, session, status) {
+  if (status !== 'done' || !rotation || !days?.length || session?.block_id !== rotation.block_id) return rotation;
+  const next = nextDayIndex({ lastCompleteIndex: session.day_index, dayCount: days.length });
+  const day = days.find((d) => d.day_index === next);
+  return { ...rotation, day_index: next, day_id: day?.id ?? null, day_name: day?.name ?? null };
 }
 
 /* Copies the frozen targets into real sets. The quickest honest log: it records
@@ -629,12 +638,13 @@ export const actions = {
       return v === '' ? null : Number(v);
     };
 
+    const status = statusFor(detail, store.state.slots, store.state.rules);
     await store.write({
       table: 'sessions',
       action: 'update',
       id: detail.session.id,
       row: {
-        status: statusFor(detail, store.state.slots, store.state.rules),
+        status,
         duration_min: num('duration_min'),
         calories: num('calories'),
         total_calories: num('total_calories'),
@@ -646,6 +656,10 @@ export const actions = {
         notes: el('f-notes').value.trim() || null,
       },
     });
+
+    // The rotation view only moves once the server has the finished session;
+    // until then Today would offer the same day again.
+    store.state.rotation = advanceRotation(store.state.rotation, store.state.days, detail.session, status);
 
     pendingShotPaths = [];
     closeSheet();

@@ -13,15 +13,26 @@
 const KEY = 'gym-coach.outbox';
 
 export function createOutbox({ storage, key = KEY } = {}) {
+  const newId = () => (globalThis.crypto?.randomUUID
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
   function read() {
+    let ops;
     try {
       const raw = storage?.getItem(key);
       if (!raw) return [];
-      const ops = JSON.parse(raw);
-      return Array.isArray(ops) ? ops : [];
+      ops = JSON.parse(raw);
     } catch {
       return [];
     }
+    if (!Array.isArray(ops)) return [];
+    // Entries queued before qid existed get one, saved, so it stays stable.
+    if (ops.some((op) => !op?.qid)) {
+      ops = ops.map((op) => (op?.qid ? op : { ...op, qid: newId() }));
+      write(ops);
+    }
+    return ops;
   }
 
   function write(ops) {
@@ -32,10 +43,6 @@ export function createOutbox({ storage, key = KEY } = {}) {
       // Nothing to do: the write is lost, but the app keeps working.
     }
   }
-
-  const newId = () => (globalThis.crypto?.randomUUID
-    ? globalThis.crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
 
   return {
     queue(op) {
@@ -87,8 +94,17 @@ export function createOutbox({ storage, key = KEY } = {}) {
         }
       }
 
-      result.kept = remaining.length;
-      write(remaining);
+      // The queue may have changed while the network was awaited: writes added
+      // then go after what was replayed, and anything discarded stays gone.
+      const started = new Set(ops.map((op) => op.qid));
+      const now = read();
+      const present = new Set(now.map((op) => op.qid));
+      const merged = [
+        ...remaining.filter((op) => present.has(op.qid)),
+        ...now.filter((op) => !started.has(op.qid)),
+      ];
+      result.kept = merged.length;
+      write(merged);
       return result;
     },
   };
