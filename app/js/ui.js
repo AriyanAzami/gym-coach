@@ -268,11 +268,45 @@ export function confirm(title, body, okLabel = 'OK', danger = false) {
   });
 }
 
+let audioCtx = null;
+
+/* iOS only lets audio start from a user gesture, so this runs inside the tap
+   that starts the timer; the beep at zero then reuses the unlocked context. */
+export function unlockAudio() {
+  try {
+    const Ctx = globalThis.AudioContext ?? globalThis.webkitAudioContext;
+    if (!Ctx) return;
+    audioCtx ??= new Ctx();
+    if (audioCtx.state === 'suspended') audioCtx.resume?.();
+  } catch { /* audio is optional */ }
+}
+
+export function playBeep() {
+  try {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.frequency.value = 880;
+    gain.gain.value = 0.25;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
+  } catch { /* audio is optional */ }
+}
+
+const DONE_SHOWN_MS = 4000;
+const LATE_BEEP_MS = 15000;
+
 export const timer = {
-  endsAt: 0, total: 0, handle: null,
+  endsAt: 0, total: 0, handle: null, hideHandle: null, finished: false,
   start(seconds, label = 'Rest') {
+    unlockAudio();
+    clearTimeout(this.hideHandle);
+    this.finished = false;
     this.total = seconds;
     this.endsAt = Date.now() + seconds * 1000;
+    el('timerbar').classList.remove('done');
     el('timerbar').classList.add('show');
     el('timer-label').textContent = label;
     clearInterval(this.handle);
@@ -283,17 +317,73 @@ export const timer = {
     const left = Math.max(0, Math.ceil((this.endsAt - Date.now()) / 1000));
     el('timer-time').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
     el('timer-track').style.width = `${Math.min(100, (1 - left / this.total) * 100)}%`;
-    if (left <= 0) this.stop();
+    if (left <= 0) this.finish();
+  },
+  finish() {
+    clearInterval(this.handle);
+    this.handle = null;
+    this.finished = true;
+    // endsAt is a timestamp, so a phone that slept still lands here when it wakes;
+    // a beep long after the fact would only be noise.
+    if (Date.now() - this.endsAt < LATE_BEEP_MS) playBeep();
+    el('timer-label').textContent = 'Rest done';
+    el('timerbar').classList.add('done');
+    clearTimeout(this.hideHandle);
+    this.hideHandle = setTimeout(() => this.stop(), DONE_SHOWN_MS);
   },
   adjust(delta) {
+    if (this.finished) return;
     this.endsAt += delta * 1000;
     this.total = Math.max(1, this.total + delta);
     this.tick();
   },
   stop() {
     clearInterval(this.handle);
+    clearTimeout(this.hideHandle);
     this.handle = null;
-    el('timerbar').classList.remove('show');
+    this.hideHandle = null;
+    this.finished = false;
+    el('timerbar').classList.remove('show', 'done');
+  },
+};
+
+/* Keeps the screen on while shouldHold() is true. iOS drops the lock whenever
+   the app is hidden, so it is re-requested when the app becomes visible. There
+   is no leave-screen hook, so a slow poll lets go once shouldHold() is false. */
+export const wakeLock = {
+  sentinel: null, shouldHold: null, poll: null, wired: false,
+  async acquire() {
+    try {
+      if (this.sentinel || !globalThis.navigator?.wakeLock) return;
+      const sentinel = await globalThis.navigator.wakeLock.request('screen');
+      this.sentinel = sentinel;
+      sentinel.addEventListener?.('release', () => { if (this.sentinel === sentinel) this.sentinel = null; });
+    } catch { /* denied, or low power mode */ }
+  },
+  release() {
+    const sentinel = this.sentinel;
+    this.sentinel = null;
+    clearInterval(this.poll);
+    this.poll = null;
+    try { sentinel?.release?.(); } catch { /* already released */ }
+  },
+  async sync() {
+    if (this.shouldHold?.()) {
+      await this.acquire();
+      if (this.sentinel && !this.poll) this.poll = setInterval(() => this.sync(), 5000);
+    } else {
+      this.release();
+    }
+  },
+  async hold(shouldHold) {
+    this.shouldHold = shouldHold;
+    if (!this.wired && globalThis.document?.addEventListener) {
+      this.wired = true;
+      globalThis.document.addEventListener('visibilitychange', () => {
+        if (globalThis.document.visibilityState === 'visible') this.sync();
+      });
+    }
+    await this.sync();
   },
 };
 

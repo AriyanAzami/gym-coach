@@ -69,7 +69,7 @@ function hasHistory(state) {
 /* Rest for a slot: the slot's own value, else the rules rest for the exercise's
    category. Category is read off the data rather than stored: an exercise that
    trains other muscles alongside its primary is a compound. */
-function restForSlot(slot, exercise, rules) {
+export function restForSlot(slot, exercise, rules) {
   if (typeof slot?.rest_s === 'number') return slot.rest_s;
   const table = rules?.session?.rest_s ?? {};
   const compound = (exercise?.secondary_muscles ?? []).length > 0;

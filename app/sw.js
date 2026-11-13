@@ -4,7 +4,7 @@
 
    Bump VERSION on every deploy so installed phones take the new shell. */
 
-const VERSION = 'v14';
+const VERSION = 'v15';
 const SHELL = `shell-${VERSION}`;
 
 const PRECACHE = [
@@ -65,13 +65,35 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin !== location.origin) return;
 
+  // A launch like ./?watch=... must open the cached shell offline, and query
+  // URLs are never stored, or each distinct one would live in the cache forever.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      caches.match(event.request, { ignoreSearch: true })
+        .then((hit) => hit || caches.match('./index.html'))
+        .then((hit) => {
+          const fetching = fetch(event.request)
+            .then((response) => {
+              if (response && response.ok && !url.search) {
+                const copy = response.clone();
+                caches.open(SHELL).then((cache) => cache.put(event.request, copy));
+              }
+              return response;
+            })
+            .catch(() => hit);
+          return hit || fetching;
+        }),
+    );
+    return;
+  }
+
   // Cache first, refresh in the background, so the app opens instantly and
   // still picks up a new deploy on the next load.
   event.respondWith(
     caches.match(event.request).then((hit) => {
       const fetching = fetch(event.request)
         .then((response) => {
-          if (response && response.ok) {
+          if (response && response.ok && !url.search) {
             const copy = response.clone();
             caches.open(SHELL).then((cache) => cache.put(event.request, copy));
           }

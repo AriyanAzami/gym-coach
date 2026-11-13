@@ -3,9 +3,9 @@
    numbers per set. */
 
 import * as store from './store.js';
-import { h, fmtLoad, fmtRest, toast, sheet, closeSheet, timer, el, q, shrinkImage } from './ui.js';
+import { h, fmtLoad, fmtRest, toast, sheet, closeSheet, timer, wakeLock, unlockAudio, el, q, shrinkImage } from './ui.js';
 import { nav } from './nav.js';
-import { sessionComplete, ymd, parseAppleWatchText, nextDayIndex } from './engine.js';
+import { sessionComplete, ymd, parseAppleWatchText, nextDayIndex, restForSlot } from './engine.js';
 
 const nameOf = (id) => store.state.exercises.find((e) => e.id === id)?.name ?? 'Unknown exercise';
 const exerciseOf = (id) => store.state.exercises.find((e) => e.id === id) ?? null;
@@ -286,6 +286,20 @@ export function prescribedRows(sessionExercises, existingSets, newId = () => glo
   return rows;
 }
 
+/* Rest for a logged exercise, by the same rule Today showed for its slot. */
+export function restFor(sessionExercise, slots, exercises, rules) {
+  if (!sessionExercise) return null;
+  const slot = (slots ?? []).find((s) => s.id === sessionExercise.slot_id) ?? null;
+  const exercise = (exercises ?? []).find((e) => e.id === sessionExercise.exercise_id) ?? null;
+  const value = restForSlot(slot, exercise, rules);
+  return typeof value === 'number' && value > 0 ? value : null;
+}
+
+function startRestFor(x) {
+  const s = restFor(x, store.state.slots, store.state.exercises, store.state.rules);
+  if (s) timer.start(s, 'Rest');
+}
+
 /* Copies the frozen targets into real sets. The quickest honest log: it records
    exactly what was prescribed, not a guess. */
 async function logPrescribed(sessionExercises) {
@@ -470,8 +484,11 @@ export const actions = {
   'done-all': async () => logPrescribed(store.state.sessionDetail.exercises),
 
   'done-exercise': async (node) => {
+    unlockAudio();
     const x = store.state.sessionDetail.exercises.find((e) => e.id === node.dataset.id);
-    if (x) await logPrescribed([x]);
+    if (!x) return;
+    await logPrescribed([x]);
+    startRestFor(x);
   },
 
   'skip-exercise': async (node) => {
@@ -513,6 +530,7 @@ export const actions = {
   'rest': (node) => timer.start(Number(node.dataset.s), 'Rest'),
 
   'save-sets': async (node) => {
+    unlockAudio();
     const sxId = node.dataset.id;
     const count = Number(q('#set-rows').dataset.count);
     const existing = setsOf(store.state.sessionDetail, sxId);
@@ -543,6 +561,7 @@ export const actions = {
     closeSheet();
     await reload();
     toast('Sets saved');
+    startRestFor(x);
   },
 
   'finish-session': () => {
@@ -664,6 +683,7 @@ export const actions = {
     pendingShotPaths = [];
     closeSheet();
     timer.stop();
+    wakeLock.release();
     store.state.sessionDetail = null;
     store.persist();
     toast(store.pendingWrites() > 0 ? 'Session finished — saved on this phone until you reconnect' : 'Session finished');
@@ -676,6 +696,10 @@ export const actions = {
    none loaded yet. Also opens the Finish sheet pre-filled when launched from
    an iOS Shortcut with ?watch=... or prefill params. */
 export async function mount(params = {}) {
+  wakeLock.hold(() => {
+    const s = store.state.sessionDetail?.session;
+    return nav.current() === 'workout' && (s?.status === 'planned' || s?.status === 'partial');
+  });
   const today = ymd(new Date());
   const openToday = store.state.sessions.find(
     (s) => s.date === today && s.kind === 'training' && (s.status === 'planned' || s.status === 'partial'),
