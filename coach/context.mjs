@@ -9,6 +9,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { serviceClient, rows, getJob, setJobStatus, shortError } from './lib/db.mjs';
+import { staleJobs, STALE_AFTER_MINUTES } from './lib/stale.mjs';
 
 const WEEKS_OF_HISTORY = 8;
 
@@ -240,6 +241,22 @@ async function fetchAll(client, job) {
   };
 }
 
+/* Closes out this user's other jobs that were lost to a cancelled or dropped
+   run. Best effort: a failed sweep must not stop this job. */
+async function sweepStale(client, job, nowIso) {
+  try {
+    const open = await client.from('ai_jobs').select('id,status,created_at')
+      .eq('user_id', job.user_id).in('status', ['queued', 'running']).then(rows);
+    const ids = staleJobs(open, nowIso, STALE_AFTER_MINUTES, job.id);
+    if (ids.length === 0) return;
+    const { error } = await client.from('ai_jobs')
+      .update({ status: 'failed', error: 'timed out', finished_at: nowIso }).in('id', ids);
+    if (!error) console.log(`swept ${ids.length} stale`);
+  } catch {
+    // ignored on purpose
+  }
+}
+
 async function main(jobId) {
   if (!jobId) {
     console.error('usage: node coach/context.mjs <job_id>');
@@ -249,6 +266,7 @@ async function main(jobId) {
   const client = serviceClient();
   try {
     const job = await getJob(client, jobId);
+    await sweepStale(client, job, new Date().toISOString());
     await setJobStatus(client, jobId, { status: 'running', started_at: new Date().toISOString() });
 
     const data = await fetchAll(client, job);

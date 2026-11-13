@@ -25,8 +25,10 @@ on:
 permissions:
   contents: read
 
+# Per job id: a shared group lets GitHub cancel a pending run when a third
+# dispatch arrives, which would leave that job's row queued forever.
 concurrency:
-  group: coach
+  group: coach-${{ github.event.client_payload.job_id || inputs.job_id }}
   cancel-in-progress: false
 
 jobs:
@@ -36,8 +38,6 @@ jobs:
 
     env:
       JOB_ID: ${{ github.event.client_payload.job_id || inputs.job_id }}
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -50,9 +50,12 @@ jobs:
       - run: npm ci
 
       - name: Install the Claude Code CLI
-        run: npm i -g @anthropic-ai/claude-code
+        run: npm i -g @anthropic-ai/claude-code@2.1.323
 
       - name: Build the context
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node coach/context.mjs "$JOB_ID"
 
       - name: Choose the prompt for this job kind
@@ -74,6 +77,10 @@ jobs:
       # decides which tools the model has at all. Both are needed. -p is
       # non-interactive, so anything outside the allow rules is refused rather
       # than waiting for a human who is not there.
+      #
+      # The model may write only under work/ (an Edit rule covers Write too), and
+      # this step holds no Supabase secret, so it cannot edit the validator and
+      # then run it with the service-role key in reach.
       - name: Run the coach
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -85,15 +92,34 @@ jobs:
             --model "$MODEL" \
             --max-turns 40 \
             --tools "Read,Write,Edit,Bash" \
-            --allowedTools "Read" "Write" "Edit" "Bash(node coach/validate.mjs:*)" \
+            --allowedTools "Read" "Edit(work/**)" "Bash(node coach/validate.mjs:*)" \
             --disallowedTools "mcp__*" "WebFetch" "WebSearch" \
             > work/claude.log 2>&1
 
+      # Anything the model changed outside work/ is discarded and dependencies
+      # are reinstalled from the lockfile before the secrets come back. always()
+      # so the failure step below also runs on the committed code.
+      - name: Restore the checkout
+        if: always()
+        run: |
+          git checkout -- .
+          git clean -ffdx -e work/
+          npm ci --ignore-scripts
+        env:
+          NPM_CONFIG_USERCONFIG: /dev/null
+
       - name: Save the result
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node coach/save.mjs "$JOB_ID"
 
       # The job row is the only place a reason may safely land, so close it out
-      # even when a step above died before save.mjs could.
+      # even when a step above died before save.mjs could. cancelled() covers a
+      # timeout or a manual cancel, which failure() does not.
       - name: Close the job out on failure
-        if: failure()
+        if: failure() || cancelled()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node coach/fail.mjs "$JOB_ID"
