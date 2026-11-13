@@ -973,3 +973,7 @@ input.from-watch { border-color: var(--accent); box-shadow: 0 0 0 2px var(--acce
 .span2 { grid-column: 1 / -1; }
 .watch-summary { margin: 12px 0; padding: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .watch-summary .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+
+ul.plain { list-style: none; padding: 0; margin: 0 0 12px; }
+ul.plain li { padding: 10px 0; border-bottom: 1px solid var(--line); }
+ul.plain li .btn { margin-top: 6px; }

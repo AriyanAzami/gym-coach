@@ -164,3 +164,25 @@ test('rendering never throws on a completely empty database', () => {
   });
   assert.doesNotThrow(() => render());
 });
+
+test('a workout left unfinished on an earlier day is called out above the plan', () => {
+  reset({ sessions: [
+    { id: 'old-1', date: '2026-01-02', kind: 'training', status: 'planned' },
+    { id: 'old-2', date: '2026-01-05', kind: 'training', status: 'planned' },
+    { id: 'done-1', date: '2026-01-06', kind: 'training', status: 'done' },
+  ] });
+  const html = render();
+  assert.match(html, /Unfinished workout/);
+  assert.match(html, /data-action="finish-unfinished" data-id="old-2"/, 'the most recent one is offered');
+  assert.ok(html.indexOf('Unfinished workout') < html.indexOf('Next up'));
+});
+
+test('no unfinished banner when every earlier session was finished', () => {
+  reset({ sessions: [{ id: 'done-1', date: '2026-01-06', kind: 'training', status: 'done' }] });
+  assert.doesNotMatch(render(), /Unfinished workout/);
+});
+
+test('today\'s own open session is not called unfinished', () => {
+  reset({ sessions: [{ id: 'now', date: ymd(new Date()), kind: 'training', status: 'planned' }] });
+  assert.doesNotMatch(render(), /Unfinished workout/);
+});

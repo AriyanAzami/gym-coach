@@ -35,24 +35,64 @@ const actions = {
   'go-tab': (node) => nav.go(node.dataset.tab),
   'retry-sync': async () => {
     const result = await store.flushOutbox();
-    ui.toast(result.sent ? `${result.sent} saved` : 'Nothing to sync');
+    ui.toast(result.sent ? `${result.sent} saved` : 'Nothing saved yet — still no connection');
     render();
   },
+  'review-failed': () => ui.sheet(failedSheet()),
+  'discard-write': async (node) => {
+    ui.closeSheet();
+    if (!await ui.confirm('Throw this change away?',
+      'It was rejected by the database and has not been saved anywhere else.', 'Discard', true)) return;
+    await store.discardWrite(node.dataset.qid);
+    ui.toast('Discarded');
+  },
 };
+
+const describe = (op) => {
+  const what = {
+    sets: 'Logged sets', session_exercises: 'Session exercises', sessions: 'Session',
+    body_metrics: 'Weigh-in', coach_notes: 'Coach note', blocks: 'Block', exercises: 'Exercise',
+  }[op.table] ?? op.table;
+  return `${what} (${op.action})`;
+};
+
+function failedSheet() {
+  const failed = store.failedWrites();
+  if (failed.length === 0) return '<h2>Nothing failed</h2><button class="btn ghost full" data-sheet="cancel">Close</button>';
+  const items = failed.map((op) => `<li>
+      <b>${ui.h(describe(op))}</b>
+      <div class="small muted">${ui.h(ui.fmtDate(String(op.queuedAt ?? '').slice(0, 10)))} · ${ui.h(op.lastError ?? 'rejected')}</div>
+      <button class="btn sm ghost" data-action="discard-write" data-qid="${ui.h(op.qid)}">Discard</button>
+    </li>`).join('');
+  return `<h2>Not saved</h2>
+    <p class="small muted">The database rejected these. They stay on this phone until you retry or discard them.</p>
+    <ul class="plain">${items}</ul>
+    <div class="grid2">
+      <button class="btn ghost" data-sheet="cancel">Close</button>
+      <button class="btn primary" data-action="retry-sync">Retry all</button>
+    </div>`;
+}
 
 for (const screen of Object.values(screens)) {
   Object.assign(actions, screen.actions ?? {});
 }
 
 function chrome() {
-  const pending = store.state.pendingWrites;
+  const { pendingWrites: pending, failedWrites: failed, online, stale } = store.state;
   const bits = [];
-  if (!store.state.online) bits.push('offline');
-  if (pending > 0) {
-    bits.push(`<button class="link" data-action="retry-sync">${pending} unsaved</button>`);
+  if (!online) bits.push('offline');
+  else if (stale) bits.push('showing what was saved on this phone');
+  const waiting = pending - failed;
+  if (waiting > 0) {
+    bits.push(`<button class="link" data-action="retry-sync">${waiting} waiting to sync</button>`);
   }
-  return bits.length ? `<div class="banner warn">${bits.join(' · ')}</div>` : '';
+  const bad = failed > 0
+    ? `<div class="banner bad"><button class="link" data-action="review-failed">${failed} not saved — review</button></div>`
+    : '';
+  return bad + (bits.length ? `<div class="banner warn">${bits.join(' · ')}</div>` : '');
 }
+
+let lastRendered = null;
 
 function render() {
   const root = ui.el('root');
@@ -93,8 +133,19 @@ function render() {
     body = `<div class="topbar"><h1>Something broke</h1></div>
       <div class="card"><p class="muted">${ui.h(err.message ?? String(err))}</p></div>`;
   }
+  // A background reload redraws the screen; only a change of tab scrolls up.
+  const keepScroll = lastRendered === current;
+  const scrollY = globalThis.scrollY ?? 0;
+  const rootScroll = root.scrollTop;
   root.innerHTML = chrome() + body;
-  root.scrollTop = 0;
+  if (keepScroll) {
+    root.scrollTop = rootScroll;
+    globalThis.scrollTo?.(0, scrollY);
+  } else {
+    root.scrollTop = 0;
+    globalThis.scrollTo?.(0, 0);
+  }
+  lastRendered = current;
 
   for (const tab of ui.qa('.tab')) {
     tab.classList.toggle('on', tab.dataset.tab === current);
@@ -162,21 +213,44 @@ store.onAuth(async (user) => {
   }
   render();
   try {
+    // Flush first, so the load that follows already contains last session's sets.
+    await store.flushOutbox().catch(() => {});
     await store.load();
-    await store.flushOutbox();
     const watchPrefill = consumeWatchUrlParams();
     if (watchPrefill) {
       nav.go('workout', { watchPrefill });
     }
-    store.subscribeJobs(() => {
-      if (current === 'coach' || current === 'block' || current === 'journal') render();
-    });
-    store.subscribeHealth(() => {
-      if (current === 'health') render();
-    });
+    subscribe();
   } catch (err) {
     ui.toast(err.message ?? 'Could not load', 'bad');
   }
+});
+
+function subscribe() {
+  store.subscribeJobs(() => {
+    if (current === 'coach' || current === 'block' || current === 'journal') render();
+  });
+  store.subscribeHealth(() => {
+    if (current === 'health') render();
+  });
+}
+
+/* iOS freezes a home-screen app in the background and drops its realtime
+   socket, so coming back after a while reloads and resubscribes. Mid-workout
+   only the outbox is flushed: the Log screen already holds the live state. */
+const RESUME_RELOAD_MS = 60_000;
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    hiddenAt = Date.now();
+    return;
+  }
+  if (!store.state.user || !store.state.loaded) return;
+  store.state.online = navigator.onLine ?? true;
+  store.flushOutbox().catch(() => {});
+  if (Date.now() - hiddenAt < RESUME_RELOAD_MS) return;
+  subscribe();
+  if (current !== 'workout') store.load().catch(() => {});
 });
 
 if ('serviceWorker' in navigator) {

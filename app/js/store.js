@@ -15,9 +15,30 @@ function client() {
   if (!supabaseClient) {
     supabaseClient = globalThis.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession: true, autoRefreshToken: true },
+      global: { fetch: timedFetch((...args) => globalThis.fetch(...args)) },
     });
   }
   return supabaseClient;
+}
+
+/* In a basement gym the phone often reports itself online while nothing gets
+   through, and a fetch can hang for a minute. Database calls give up instead,
+   so the write lands in the outbox. Storage and functions are left alone: a
+   screenshot upload or a vision read may legitimately take longer. */
+const REST_TIMEOUT_MS = 15_000;
+
+export function timedFetch(fetchImpl, ms = REST_TIMEOUT_MS) {
+  return (input, init = {}) => {
+    const url = String(input?.url ?? input);
+    if (!url.includes('/rest/v1/') || typeof AbortSignal?.timeout !== 'function') {
+      return fetchImpl(input, init);
+    }
+    const timeout = AbortSignal.timeout(ms);
+    const signal = init.signal && typeof AbortSignal.any === 'function'
+      ? AbortSignal.any([init.signal, timeout])
+      : (init.signal ?? timeout);
+    return fetchImpl(input, { ...init, signal });
+  };
 }
 
 let safeStorage = null;
@@ -62,6 +83,8 @@ export const state = {
   healthRuns: [],
   healthSettings: null,
   pendingWrites: 0,
+  failedWrites: 0,
+  stale: false,
 };
 
 const handlers = {};
@@ -73,7 +96,9 @@ export const emit = (event, data) => (handlers[event] ?? []).forEach((fn) => {
 globalThis.addEventListener?.('online', () => {
   state.online = true;
   emit('net');
-  flushOutbox();
+  flushOutbox()
+    .then(() => (state.stale ? load() : null))
+    .catch(() => {});
 });
 globalThis.addEventListener?.('offline', () => { state.online = false; emit('net'); });
 
@@ -89,7 +114,10 @@ export async function signIn(email, password) {
   return data.user;
 }
 
-export const signOut = () => client().auth.signOut();
+export const signOut = () => {
+  try { safeStorage?.removeItem(SNAPSHOT_KEY); } catch { /* nothing to clear */ }
+  return client().auth.signOut();
+};
 
 export function onAuth(callback) {
   let lastUserId;
@@ -115,8 +143,86 @@ const rows = (result) => {
   return result.data ?? [];
 };
 
+/* The last loaded state, kept on the phone so the app opens with today's plan
+   and the open workout when there is no signal. History-sized lists (document
+   versions, the journal) stay out to keep it small. */
+const SNAPSHOT_KEY = 'gym-coach.snapshot';
+const SNAPSHOT_KEYS = [
+  'rules', 'rulesVersion', 'manual', 'manualVersion', 'exercises', 'activeBlock', 'blocks',
+  'days', 'slots', 'liftState', 'rotation', 'weeklyVolume', 'trainingRate', 'bodyTrend',
+  'sessions', 'jobs', 'notes', 'decisions', 'bodyMetrics', 'sessionDetail',
+  'healthRuns', 'healthSettings',
+];
+
+export function snapshotOf(s) {
+  const picked = {};
+  for (const key of SNAPSHOT_KEYS) {
+    if (s[key] !== undefined) picked[key] = s[key];
+  }
+  return { userId: s.user?.id ?? null, state: picked };
+}
+
+export function restoreSnapshot(s, snap) {
+  if (!snap?.state || !s.user?.id || snap.userId !== s.user.id) return false;
+  Object.assign(s, snap.state, { loaded: true, stale: true });
+  return true;
+}
+
+function readSnapshot() {
+  try {
+    const raw = safeStorage?.getItem(SNAPSHOT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function persist() {
+  try {
+    safeStorage?.setItem(SNAPSHOT_KEY, JSON.stringify(snapshotOf(state)));
+  } catch {
+    // Storage full or refused: the app still works online.
+  }
+}
+
+function syncPending() {
+  state.pendingWrites = outbox.size();
+  state.failedWrites = outbox.failed().length;
+}
+
+/* Fresh rows from the server know nothing of writes still in the outbox, so
+   those are laid back over them; otherwise a session started offline would
+   vanish from Today and could be started twice. */
+function replayQueued() {
+  for (const op of outbox.list()) mirror(state, op);
+}
+
+/* With no network, the in-memory state is kept, or the snapshot restored on a
+   cold start. Either way it is marked stale and the app still renders. */
+function fallBackToLocal(err) {
+  if (state.loaded || restoreSnapshot(state, readSnapshot())) {
+    state.stale = true;
+    syncPending();
+    emit('loaded');
+    return;
+  }
+  throw err;
+}
+
 export async function load() {
   if (!state.user) return;
+  if (!state.online) {
+    fallBackToLocal(new Error('offline, and nothing saved on this phone yet'));
+    return;
+  }
+  try {
+    await loadFromServer();
+  } catch (err) {
+    fallBackToLocal(err);
+  }
+}
+
+async function loadFromServer() {
   const week = isoWeekStart(ymd(new Date()));
 
   const [
@@ -152,7 +258,22 @@ export async function load() {
   const rulesDoc = latest('rules');
   const manualDoc = latest('manual');
 
+  const blockId = blocks.find((b) => b.status === 'active')?.id;
+  let days = [];
+  let slots = [];
+  if (blockId) {
+    days = await client().from('block_days').select('*')
+      .eq('block_id', blockId).order('day_index').then(rows);
+    const dayIds = days.map((d) => d.id);
+    slots = dayIds.length
+      ? await client().from('block_slots').select('*').in('day_id', dayIds).order('position').then(rows)
+      : [];
+  }
+
   Object.assign(state, {
+    days,
+    slots,
+    stale: false,
     documents,
     rules: rulesDoc?.body_json ?? null,
     rulesVersion: rulesDoc?.version ?? null,
@@ -179,20 +300,9 @@ export async function load() {
     loaded: true,
   });
 
-  const blockId = state.activeBlock?.id;
-  if (blockId) {
-    state.days = await client().from('block_days').select('*')
-      .eq('block_id', blockId).order('day_index').then(rows);
-    const dayIds = state.days.map((d) => d.id);
-    state.slots = dayIds.length
-      ? await client().from('block_slots').select('*').in('day_id', dayIds).order('position').then(rows)
-      : [];
-  } else {
-    state.days = [];
-    state.slots = [];
-  }
-
-  state.pendingWrites = outbox.size();
+  replayQueued();
+  syncPending();
+  persist();
   emit('loaded');
 }
 
@@ -220,16 +330,25 @@ export async function loadSession(sessionId) {
 /* The open session, with its frozen targets and whatever has been logged so far.
    Held on state so the Workout screen can be rendered from stubbed data. */
 export async function loadSessionDetail(sessionId) {
-  const session = state.sessions.find((s) => s.id === sessionId)
-    ?? await client().from('sessions').select('*').eq('id', sessionId).maybeSingle()
-      .then((r) => (r.error ? null : r.data));
-  if (!session) {
-    state.sessionDetail = null;
-    return null;
+  const cached = state.sessionDetail?.session?.id === sessionId ? state.sessionDetail : null;
+  if (!state.online && cached) return cached;
+  try {
+    const session = state.sessions.find((s) => s.id === sessionId)
+      ?? await client().from('sessions').select('*').eq('id', sessionId).maybeSingle()
+        .then((r) => (r.error ? null : r.data));
+    if (!session) {
+      state.sessionDetail = null;
+      return null;
+    }
+    const { exercises, sets } = await loadSession(sessionId);
+    state.sessionDetail = { session, exercises, sets };
+    replayQueued();
+    persist();
+    return state.sessionDetail;
+  } catch (err) {
+    if (cached) return cached;
+    throw err;
   }
-  const { exercises, sets } = await loadSession(sessionId);
-  state.sessionDetail = { session, exercises, sets };
-  return state.sessionDetail;
 }
 
 export const liftHistoryFor = (exerciseId) => client().from('lift_history').select('*')
@@ -258,57 +377,177 @@ export async function uploadSessionShots(sessionId, files) {
 
 // ---------- writes ----------
 
-/* A failure the row itself caused will fail the same way forever, so the outbox
-   drops it instead of blocking every later write. Postgres class 22 and 23 are
-   data and constraint violations; 401/403 mean the session, not the network. */
-function isPermanent(error) {
+/* What a failed write means for the queue. "duplicate" on an insert is checked
+   against the row's own id, because a replay after a lost response looks
+   exactly like that. "auth" is an expired session, which a token refresh fixes.
+   "permanent" is a row the database will reject however often it is sent.
+   Anything else, including a timeout, is the network. */
+export function classifyError(error, action) {
   const code = String(error?.code ?? '');
-  return /^(22|23)/.test(code) || ['401', '403', '400', '42501'].includes(code);
+  const message = String(error?.message ?? '');
+  if (code === 'PGRST301' || code === 'PGRST303' || error?.status === 401 || /\bjwt\b/i.test(message)) {
+    return { kind: 'auth' };
+  }
+  if (code === '23505' && action === 'insert') return { kind: 'duplicate' };
+  if (/^(22|23)/.test(code) || /^PGRST[12]\d\d$/.test(code) || ['42501', '400', '403'].includes(code)) {
+    return { kind: 'permanent' };
+  }
+  return { kind: 'transient' };
+}
+
+const uuid = () => globalThis.crypto.randomUUID();
+
+/* Every inserted row carries an id made on the phone. The screen can show it
+   and edit it before the server has seen it, and a replayed insert is
+   recognisable as one rather than creating a second copy. */
+export function withIds(op, newId = uuid) {
+  if (op?.action !== 'insert') return op;
+  const add = (r) => (r.id ? r : { ...r, id: newId() });
+  return { ...op, row: Array.isArray(op.row) ? op.row.map(add) : add(op.row) };
+}
+
+const SESSION_DEFAULTS = {
+  pain: 'none', notes: null, hr_zones: null, duration_min: null, calories: null,
+  avg_hr: null, peak_hr: null, effort_1_10: null, source: 'app',
+};
+
+/* Applies a write to the in-memory state the screens render from, so a set
+   logged with no signal shows the moment it is tapped. Covers the open
+   workout, the session list and weigh-ins; everything else waits for a load. */
+export function mirror(s, op) {
+  const list = Array.isArray(op.row) ? op.row : [op.row];
+  const detail = s.sessionDetail;
+  const merge = (arr, id, row) => {
+    const found = arr?.find((x) => x.id === id);
+    if (found) Object.assign(found, row);
+  };
+  const has = (arr, id) => (arr ?? []).some((x) => x.id === id);
+
+  if (op.table === 'sessions') {
+    if (op.action === 'insert') {
+      for (const row of list) {
+        if (!has(s.sessions, row.id)) {
+          s.sessions = [{ ...SESSION_DEFAULTS, created_at: new Date().toISOString(), ...row }, ...(s.sessions ?? [])];
+        }
+      }
+    } else if (op.action === 'update') {
+      merge(s.sessions, op.id, op.row);
+      if (detail?.session?.id === op.id) Object.assign(detail.session, op.row);
+    }
+  } else if (op.table === 'session_exercises') {
+    if (op.action === 'insert') {
+      for (const row of list) {
+        let d = s.sessionDetail;
+        if (d?.session?.id !== row.session_id) {
+          const session = (s.sessions ?? []).find((x) => x.id === row.session_id);
+          if (!session) continue;
+          d = { session, exercises: [], sets: [] };
+          s.sessionDetail = d;
+        }
+        if (!has(d.exercises, row.id)) d.exercises.push({ deviation_note: null, ...row });
+      }
+    } else if (op.action === 'update') {
+      merge(detail?.exercises, op.id, op.row);
+    }
+  } else if (op.table === 'sets' && detail) {
+    if (op.action === 'insert') {
+      for (const row of list) {
+        if (has(detail.exercises, row.session_exercise_id) && !has(detail.sets, row.id)) {
+          detail.sets.push({ partial: false, done: true, ...row });
+        }
+      }
+    } else if (op.action === 'update') {
+      merge(detail.sets, op.id, op.row);
+    } else if (op.action === 'delete') {
+      detail.sets = detail.sets.filter((x) => x.id !== op.id);
+    }
+  } else if (op.table === 'body_metrics' && op.action === 'insert' && Array.isArray(s.bodyMetrics)) {
+    for (const row of list) {
+      if (!has(s.bodyMetrics, row.id)) s.bodyMetrics = [row, ...s.bodyMetrics];
+    }
+  }
+}
+
+async function run(op) {
+  const table = client().from(op.table);
+  try {
+    if (op.action === 'insert') return await table.insert(op.row).select();
+    if (op.action === 'upsert') return await table.upsert(op.row, { onConflict: op.onConflict }).select();
+    if (op.action === 'update') return await table.update(op.row).eq('id', op.id).select();
+    if (op.action === 'delete') return await table.delete().eq('id', op.id);
+  } catch (err) {
+    return { error: { message: String(err?.message ?? err), code: '' } };
+  }
+  return { error: { message: `unknown action ${op.action}`, code: '400' } };
+}
+
+async function alreadyLanded(op) {
+  const ids = (Array.isArray(op.row) ? op.row : [op.row]).map((r) => r.id).filter(Boolean);
+  if (ids.length === 0) return false;
+  const { data, error } = await client().from(op.table).select('id').in('id', ids);
+  return !error && (data ?? []).length === ids.length;
 }
 
 async function send(op) {
-  const table = client().from(op.table);
-  let result;
-  if (op.action === 'insert') result = await table.insert(op.row).select();
-  else if (op.action === 'upsert') result = await table.upsert(op.row, { onConflict: op.onConflict }).select();
-  else if (op.action === 'update') result = await table.update(op.row).eq('id', op.id).select();
-  else if (op.action === 'delete') result = await table.delete().eq('id', op.id);
-  else throw Object.assign(new Error(`unknown action ${op.action}`), { permanent: true });
-
+  let result = await run(op);
+  const errorOf = (r) => ({ ...r.error, status: r.status });
+  if (result.error && classifyError(errorOf(result), op.action).kind === 'auth') {
+    await client().auth.refreshSession().catch(() => {});
+    result = await run(op);
+  }
   if (result.error) {
+    const { kind } = classifyError(errorOf(result), op.action);
+    if (kind === 'duplicate' && await alreadyLanded(op)) {
+      throw Object.assign(new Error('already saved'), { landed: true });
+    }
     throw Object.assign(new Error(result.error.message), {
-      permanent: isPermanent(result.error),
+      permanent: kind === 'permanent' || kind === 'duplicate',
       code: result.error.code,
     });
   }
   return result.data?.[0] ?? null;
 }
 
-/* Online, a write goes straight out so the screen can use the returned id.
-   Offline, it is queued and the caller gets null. */
-export async function write(op) {
-  if (state.online) {
+/* Online with nothing queued, a write goes straight out. Otherwise it joins
+   the back of the queue, so it can never overtake an earlier write. Either
+   way the screen state is updated at once and saved on the phone. A write the
+   database rejects outright is thrown, so the screen can say so. */
+export async function write(input) {
+  const op = withIds(input);
+  const behind = outbox.size() > 0;
+  if (state.online && !behind) {
     try {
-      return await send(op);
+      const saved = await send(op);
+      mirror(state, op);
+      persist();
+      return saved;
     } catch (err) {
+      if (err.landed) {
+        mirror(state, op);
+        persist();
+        return null;
+      }
       if (err.permanent) throw err;
     }
   }
   outbox.queue(op);
-  state.pendingWrites = outbox.size();
+  mirror(state, op);
+  persist();
+  syncPending();
   emit('pending');
+  if (behind && state.online) flushOutbox().catch(() => {});
   return null;
 }
 
 let flushing = null;
 
 export async function flushOutbox() {
-  if (!state.online || outbox.size() === 0) return { sent: 0, dropped: 0, kept: 0 };
+  if (!state.online || outbox.size() === 0) return { sent: 0, failed: 0, kept: 0 };
   if (flushing) return flushing;
   flushing = (async () => {
     try {
       const result = await outbox.flush(send);
-      state.pendingWrites = outbox.size();
+      syncPending();
       emit('pending');
       if (result.sent > 0) await load();
       return result;
@@ -320,6 +559,16 @@ export async function flushOutbox() {
 }
 
 export const pendingWrites = () => outbox.size();
+export const failedWrites = () => outbox.failed();
+
+/* The only way a queued write leaves the phone without landing: the owner
+   looked at it and chose to throw it away. */
+export async function discardWrite(qid) {
+  outbox.discard(qid);
+  syncPending();
+  emit('pending');
+  await load();
+}
 
 // ---------- documents ----------
 

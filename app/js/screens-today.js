@@ -3,7 +3,7 @@
    is asked of a model. */
 
 import * as store from './store.js';
-import { h, cleanText, fmtLoad, fmtDate, fmtRest, toast, sheet, closeSheet, el, singleFlight } from './ui.js';
+import { h, cleanText, fmtLoad, fmtDate, fmtRest, toast, sheet, closeSheet, confirm, el, singleFlight } from './ui.js';
 import { nav } from './nav.js';
 import { planForDay, volumeVsTarget, ymd, isoWeekStart, nextDayIndex } from './engine.js';
 
@@ -22,6 +22,28 @@ function todaysSession() {
   return store.state.sessions.find(
     (s) => s.date === today && s.kind === 'training' && (s.status === 'planned' || s.status === 'partial'),
   ) ?? null;
+}
+
+/* A session left "planned" on an earlier day: its sets do not count toward
+   progression until it is finished, and Today would otherwise repeat the day
+   without saying why. */
+export function unfinishedSession(sessions, today) {
+  return (sessions ?? [])
+    .filter((s) => s.kind === 'training' && s.status === 'planned' && s.date < today)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0] ?? null;
+}
+
+function unfinishedBanner() {
+  const s = unfinishedSession(store.state.sessions, ymd(new Date()));
+  if (!s) return '';
+  return `<div class="card">
+    <div class="eyebrow">Unfinished workout</div>
+    <p class="small">The session from ${fmtDate(s.date)} was never finished, so its sets do not count toward your next targets yet.</p>
+    <div class="grid2">
+      <button class="btn ghost" data-action="discard-unfinished" data-id="${h(s.id)}">Not trained</button>
+      <button class="btn primary" data-action="finish-unfinished" data-id="${h(s.id)}">Finish it</button>
+    </div>
+  </div>`;
 }
 
 function empty(title, body, tab, cta) {
@@ -178,7 +200,7 @@ export function render() {
   }
 
   const warning = plan.reason ? `<div class="banner bad">${h(plan.reason)}</div>` : '';
-  return head + warning + planCard(plan, todaysSession()) + statsCard() + volumeCard();
+  return head + unfinishedBanner() + warning + planCard(plan, todaysSession()) + statsCard() + volumeCard();
 }
 
 /* Starting a session freezes the plan the owner just read: one
@@ -195,11 +217,15 @@ async function startSession() {
     rules: store.state.rules,
   });
 
+  // Ids are made here so the session and its exercises can be written, and
+  // logged against, with no signal. The outbox keeps the two inserts in order.
+  const sessionId = globalThis.crypto.randomUUID();
   try {
-    const session = await store.write({
+    await store.write({
       table: 'sessions',
       action: 'insert',
       row: {
+        id: sessionId,
         date: ymd(new Date()),
         block_id: store.state.activeBlock.id,
         day_index: day.day_index,
@@ -207,16 +233,12 @@ async function startSession() {
         status: 'planned',
       },
     });
-    if (!session) {
-      toast('Saved offline — reconnect to start logging', 'bad');
-      return;
-    }
-
     await store.write({
       table: 'session_exercises',
       action: 'insert',
       row: plan.exercises.map((e, i) => ({
-        session_id: session.id,
+        id: globalThis.crypto.randomUUID(),
+        session_id: sessionId,
         slot_id: e.slotId,
         exercise_id: e.exerciseId,
         position: i,
@@ -227,8 +249,7 @@ async function startSession() {
       })),
     });
 
-    await store.load();
-    nav.go('workout', { sessionId: session.id });
+    nav.go('workout', { sessionId });
   } catch (err) {
     toast(err.message ?? 'Could not start the session', 'bad');
   }
@@ -237,6 +258,14 @@ async function startSession() {
 export const actions = {
   'start-session': singleFlight(startSession),
   'resume-session': (node) => nav.go('workout', { sessionId: node.dataset.id }),
+  'finish-unfinished': (node) => nav.go('workout', { sessionId: node.dataset.id, openFinish: true }),
+  'discard-unfinished': async (node) => {
+    if (!await confirm('Mark it as not trained?',
+      'Any sets logged in it stay in the database but will not count toward progression.',
+      'Mark skipped')) return;
+    await store.write({ table: 'sessions', action: 'update', id: node.dataset.id, row: { status: 'skipped' } });
+    nav.refresh();
+  },
   'log-weight': () => sheet(weightSheet()),
   'save-weight': async () => {
     const raw = el('bw-weight')?.value ?? '';

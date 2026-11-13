@@ -46,29 +46,6 @@ test('the outbox survives a reload', () => {
   assert.equal(fresh.list()[0].row.set_no, 1);
 });
 
-test('a replayed write that conflicts is dropped, not retried forever', async () => {
-  const storage = fakeStorage();
-  const box = createOutbox({ storage });
-  box.queue(op(1));
-  box.queue(op(2));
-  box.queue(op(3));
-
-  const seen = [];
-  const result = await box.flush(async (o) => {
-    seen.push(o.row.set_no);
-    if (o.row.set_no === 2) {
-      const err = new Error('duplicate key');
-      err.permanent = true;
-      throw err;
-    }
-  });
-
-  assert.deepEqual(seen, [1, 2, 3], 'a permanent failure must not stop the queue');
-  assert.equal(result.dropped, 1);
-  assert.equal(result.sent, 2);
-  assert.equal(box.size(), 0, 'the conflicting write is gone, not parked forever');
-});
-
 test('a transient failure keeps the write and stops the queue to preserve order', async () => {
   const storage = fakeStorage();
   const box = createOutbox({ storage });
@@ -89,26 +66,12 @@ test('a transient failure keeps the write and stops the queue to preserve order'
   assert.equal(box.list()[0].attempts, 1);
 });
 
-test('a write that keeps failing is dropped after the attempt limit', async () => {
-  const storage = fakeStorage();
-  const box = createOutbox({ storage, maxAttempts: 2 });
-  box.queue(op(1));
-
-  await box.flush(async () => { throw new Error('network down'); });
-  assert.equal(box.size(), 1);
-  assert.equal(box.list()[0].attempts, 1);
-
-  const result = await box.flush(async () => { throw new Error('network down'); });
-  assert.equal(result.dropped, 1);
-  assert.equal(box.size(), 0, 'a write that can never land must not block every later write');
-});
-
 test('flushing an empty outbox does nothing and calls nothing', async () => {
   const box = createOutbox({ storage: fakeStorage() });
   let calls = 0;
   const result = await box.flush(async () => { calls += 1; });
   assert.equal(calls, 0);
-  assert.deepEqual(result, { sent: 0, dropped: 0, kept: 0 });
+  assert.deepEqual(result, { sent: 0, failed: 0, kept: 0 });
 });
 
 test('a storage that refuses to read leaves the outbox empty rather than throwing', () => {
@@ -132,8 +95,8 @@ test('every queued write carries an id so a replay can be recognised', () => {
   box.queue(op(1));
   box.queue(op(2));
   const [a, b] = box.list();
-  assert.ok(a.id && b.id);
-  assert.notEqual(a.id, b.id);
+  assert.ok(a.qid && b.qid);
+  assert.notEqual(a.qid, b.qid);
 });
 
 test('two outboxes over the same storage do not lose a write', () => {

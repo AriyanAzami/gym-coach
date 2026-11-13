@@ -330,6 +330,21 @@ export function setTheme(mode) {
   return next;
 }
 
+/* An action that throws, or rejects, says so on screen instead of failing
+   silently in the console. */
+export function guarded(fn, node, event, report = (msg) => toast(msg, 'bad')) {
+  const fail = (err) => {
+    console.error(err);
+    report(err?.message ?? 'Something went wrong');
+  };
+  try {
+    return Promise.resolve(fn(node, event)).catch(fail);
+  } catch (err) {
+    fail(err);
+    return Promise.resolve();
+  }
+}
+
 export function wireChrome(actions) {
   setTheme(getTheme());
   document.addEventListener('click', (event) => {
@@ -341,13 +356,13 @@ export function wireChrome(actions) {
     const node = event.target.closest('[data-action]');
     if (!node || node.tagName === 'SELECT' || node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') return;
     const fn = actions[node.dataset.action];
-    if (fn) { event.preventDefault(); fn(node, event); }
+    if (fn) { event.preventDefault(); guarded(fn, node, event); }
   });
   document.addEventListener('change', (event) => {
     const node = event.target.closest('[data-action]');
     if (!node) return;
     const fn = actions[node.dataset.action];
-    if (fn) fn(node, event);
+    if (fn) guarded(fn, node, event);
   });
   document.addEventListener('input', (event) => {
     const node = event.target.closest('textarea[data-action], input[data-action]');

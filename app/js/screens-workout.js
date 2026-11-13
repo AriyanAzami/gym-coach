@@ -236,17 +236,26 @@ export function setsEditor(sxId) {
     </div>`;
 }
 
+/* Every write has already been applied to the screen state, so the screen is
+   redrawn at once. The server copy is fetched only when nothing is still
+   queued, since a fetch then would not yet contain the queued sets. */
 async function reload() {
-  const id = store.state.sessionDetail?.session?.id;
-  if (id) await store.loadSessionDetail(id);
   nav.refresh();
+  const id = store.state.sessionDetail?.session?.id;
+  if (!id || !store.state.online || store.pendingWrites() > 0) return;
+  try {
+    await store.loadSessionDetail(id);
+    nav.refresh();
+  } catch {
+    // The screen already shows what was logged.
+  }
 }
 
 /* Copies the frozen targets into real sets. The quickest honest log: it records
    exactly what was prescribed, not a guess. */
 /* Pure: the sets "Done as prescribed" would insert. Skipped exercises are left
    alone and sets that already exist are never duplicated. */
-export function prescribedRows(sessionExercises, existingSets) {
+export function prescribedRows(sessionExercises, existingSets, newId = () => globalThis.crypto.randomUUID()) {
   const rows = [];
   for (const x of sessionExercises) {
     if (isSkipped(x)) continue;
@@ -254,6 +263,7 @@ export function prescribedRows(sessionExercises, existingSets) {
     for (let n = 1; n <= (x.target_sets ?? 0); n += 1) {
       if (already.has(n)) continue;
       rows.push({
+        id: newId(),
         session_exercise_id: x.id,
         set_no: n,
         weight: x.target_weight,
@@ -641,9 +651,10 @@ export const actions = {
     closeSheet();
     timer.stop();
     store.state.sessionDetail = null;
-    await store.load();
-    toast('Session finished');
+    store.persist();
+    toast(store.pendingWrites() > 0 ? 'Session finished — saved on this phone until you reconnect' : 'Session finished');
     nav.go('today');
+    store.load().catch(() => {});
   },
 };
 
@@ -658,7 +669,11 @@ export async function mount(params = {}) {
   const have = store.state.sessionDetail?.session?.id;
   const want = params.sessionId ?? have ?? openToday?.id;
   if (want && want !== have) {
-    await store.loadSessionDetail(want);
+    try {
+      await store.loadSessionDetail(want);
+    } catch {
+      toast('No signal, and this session is not saved on this phone yet', 'bad');
+    }
     nav.refresh();
   }
   if (params.openFinish && store.state.sessionDetail?.session) {
