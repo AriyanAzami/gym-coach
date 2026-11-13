@@ -11,6 +11,17 @@ and rest, but never a weight.** The load for every set is computed from what
 you last logged. That way the programme and the progression can't disagree,
 and the AI never has to guess what you can lift.
 
+**What this repository is.** It's the code for one person's training app, made
+public so it can be read, forked and run by anyone for themselves. It isn't a
+hosted service, and it has no sign-up page. If you want to use it, you set up
+your own free Supabase project and your own copy of the app (see
+[Set it up for yourself](#set-it-up-for-yourself)). None of the owner's data
+is in this repository. It lives in a private database, and every example file
+here uses invented numbers.
+
+It's built to be used as a home-screen web app on an iPhone in the gym, with
+patchy signal, but it runs in any modern browser.
+
 ```mermaid
 flowchart TD
     A["Phone app<br/>(PWA on GitHub Pages)"] -- "supabase-js" --> B
@@ -41,6 +52,7 @@ Three tiers, by what they cost:
 - [Development](#development)
 - [Repository layout](#repository-layout)
 - [Further reading](#further-reading)
+- [Issues and contributions](#issues-and-contributions)
 
 ## Features
 
@@ -133,7 +145,6 @@ today's date. For each slot in the day it works out one target:
    exercise earlier, lengthen the rest, add a set or change the variation.
 3. **No history.** A conservative opener, worked out as a fraction of the
    closest similar lift you have logged. It is always labelled as an opener.
-
 4. **Back-off (optional).** If the rules carry `progression.backoff` and at
    least `below_min_fraction` of the last working sets fell below `rep_min`,
    the next target drops one increment and restarts at the bottom of the
@@ -145,7 +156,9 @@ exactly the plan you saw.
 **Deload.** When the deload triggers in the rules fire, Today shows a "Deload
 due" banner that asks the coach for a one-week deload block. A block plan may
 carry `"deload": true`, and the validator then scales its weekly volume
-minimums by `rules.deload.set_factor`.
+minimums by `rules.deload.set_factor`. Activating the deload block archives
+the block you were on, so when the week is over you ask the coach for your
+next block.
 
 ### 3. Logging works offline
 
@@ -329,8 +342,11 @@ npm install
    ```bash
    npx supabase login
    npx supabase link --project-ref <your-project-ref>
-   npx supabase db push
+   npx supabase db push --linked
    ```
+
+   Keep `--linked`. Without it, recent versions of the Supabase CLI push to a
+   local development database instead of your project.
 
    Migrations are named `<timestamp>_NNNN_name.sql`. The timestamp is the
    version Supabase records, so the files must match the project's migration
@@ -470,8 +486,10 @@ supabase/
   seed/              rules.example.json (fabricated values)
 migrate/             one-off Notion importer
 test/                node --test suites
-.github/workflows/   test.yml, pages.yml, coach.yml
-docs/                specification and build notes
+tools/               make-icons.mjs, generates the app icons
+.github/workflows/   test.yml (every push), pages.yml (deploy app/),
+                     coach.yml (AI jobs)
+docs/                specification, build plan, design notes
 ```
 
 ## Further reading
@@ -482,6 +500,13 @@ docs/                specification and build notes
   from.
 - [`CLAUDE.md`](CLAUDE.md): the working rules for anyone, human or agent,
   changing the code.
+
+## Issues and contributions
+
+This is a personal project, shaped around one person's training, so feature
+requests may not fit. Bug reports are welcome, especially anything about
+security or data leaking into a public log. **Never paste real training data,
+keys or tokens into an issue.** Use made-up numbers, as the tests do.
 
 ## Not medical advice
 
