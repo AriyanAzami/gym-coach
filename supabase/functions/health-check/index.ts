@@ -37,16 +37,17 @@ const rows = <T>(r: { data: T[] | null; error: unknown }) => {
 };
 
 const SYSTEM_PROMPT = `You review a personal strength-training system for problems.
-You receive JSON with the owner's rules (every coaching number), operating manual,
-exercises, the last ${WEEKS_OF_HISTORY} weeks of sessions with every set, derived views,
-the active block, decisions, coach notes, recent coach-job statuses, recent journal
-turns, and the findings a deterministic checker already produced.
+You receive JSON with numbers and structure only, no free text: the owner's rules
+(every coaching number), exercise names with muscles and equipment, the last
+${WEEKS_OF_HISTORY} weeks of sessions with every set, derived views, the active
+block, recent coach-job statuses, and the findings a deterministic checker
+already produced.
 
-Look for what the checker cannot see: logging that contradicts a note or injury,
-a plan that drifts from the manual or rules, exercises that keep getting skipped,
-effort or pain trends, inconsistencies between the block and what was actually
-done, anything that looks wrong. Do not repeat the checker's findings. Do not
-invent coaching numbers; quote the rules when you cite a threshold.
+Look for what the checker cannot see: a plan that drifts from the rules,
+exercises that keep getting skipped, effort trends, inconsistencies between the
+block and what was actually done, odd numbers in the sets, anything that looks
+wrong. Do not repeat the checker's findings. Do not invent coaching numbers;
+quote the rules when you cite a threshold.
 
 Answer with one JSON object and nothing else:
 {"summary_md": "3-6 short markdown bullet points, plain and direct",

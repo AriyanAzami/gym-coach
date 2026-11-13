@@ -176,11 +176,18 @@ export function validateBlock(plan, context) {
     ? `${perWeekRate} sessions a week (your trailing 4-week rate)`
     : `${days.length} sessions a week (no logged rate yet, so one full cycle is assumed)`;
 
+  const deload = plan.deload === true;
+  const factor = rules.deload.set_factor;
   for (const row of volume) {
     if (!rules.priority.includes(row.muscle)) continue;
-    if (row.shortBy > 0) {
+    const target = deload ? round(row.target * factor) : row.target;
+    const shortBy = deload ? Math.max(0, round(target - row.sets)) : row.shortBy;
+    if (shortBy > 0) {
+      const minimum = deload
+        ? `${target} (the minimum of ${row.target} scaled by the deload set_factor of ${factor})`
+        : `${target}`;
       add(`Volume: ${row.muscle} gets ${row.sets} sets a week at ${rateText}, `
-        + `below the minimum of ${row.target}. Short by ${row.shortBy}.`);
+        + `below the minimum of ${minimum}. Short by ${shortBy}.`);
     }
   }
 

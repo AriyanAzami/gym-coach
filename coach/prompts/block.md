@@ -39,6 +39,17 @@ Write `work/output.json`: one block, matching `coach/schema/block.schema.json`.
   get meaningfully more weekly sets than a higher-priority one.
 - Put core and mobility work where `rules.warmup.core_mobility_placement` says.
 
+## Deload week
+
+If `job.instructions` starts with "Deload week:", do not design a new block.
+Copy the active block from `current_block` in the context, with the same
+exercises, days, positions, rep ranges and rest. Cut each slot's sets by
+`rules.deload.set_factor`, rounded to a whole number and never below 1. Set
+`"deload": true` at the top level, put the word "Deload" in `name`, and set
+`ends_on` about seven days after `starts_on` if the schema has those fields. The
+validator then scales each weekly volume minimum by that same factor; every
+other gate still applies.
+
 ## The rationale
 
 `rationale` is markdown, and it is the part the owner reads. It must:

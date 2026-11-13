@@ -299,3 +299,35 @@ test('an empty equipment_unavailable list fails nothing', () => {
   ctx.rules.constraints.equipment_unavailable = [];
   assert.doesNotMatch(joined(validPlan(), ctx), /equipment_unavailable/);
 });
+
+// ---- deload weeks ----
+
+const deloadPlan = (factor = rules.deload.set_factor) => mutate((p) => {
+  p.name = 'Winter block Deload';
+  for (const d of p.days) for (const s of d.slots) s.sets = Math.max(1, Math.round(s.sets * factor));
+});
+
+test('a deload plan that meets min times set_factor passes with deload true', () => {
+  const plan = { ...deloadPlan(), deload: true };
+  assert.deepEqual(errorsOf(plan), []);
+});
+
+test('the same plan without deload true fails the volume gate', () => {
+  assert.match(joined(deloadPlan()), /Volume/);
+});
+
+test('a deload plan below min times set_factor still fails, and says it is scaled', () => {
+  const plan = { ...deloadPlan(), deload: true };
+  for (const d of plan.days) for (const s of d.slots) s.sets = 1;
+  const out = joined(plan);
+  assert.match(out, /Volume/);
+  assert.match(out, /deload/i);
+});
+
+test('deload must be a boolean', () => {
+  assert.match(joined({ ...validPlan(), deload: 'yes' }), /deload/);
+});
+
+test('deload false leaves the full minimums in force', () => {
+  assert.match(joined({ ...deloadPlan(), deload: false }), /Volume/);
+});

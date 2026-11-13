@@ -58,28 +58,51 @@ test('a session collapses its sets into one line per exercise, done sets only, p
   const s = ctx.sessions[0];
   assert.equal(s.date, '2026-11-10');
   assert.equal(s.effort, 8);
-  assert.equal(s.notes, 'felt fine');
   assert.deepEqual(s.lifts, ['Bench press: 100kg×8, 100kg×7, 100kg×4p (target 100kg×8)']);
 });
 
 test('the block names exercises and keeps slot order', () => {
   const day = modelContext(data(), []).active_block.days[0];
   assert.equal(day.name, 'Push');
-  assert.deepEqual(day.slots, ['Bench press 3×6-8 (pause)', 'Old row 3×10-12']);
+  assert.deepEqual(day.slots, ['Bench press 3×6-8', 'Old row 3×10-12']);
 });
 
-test('the rest of the picture survives: rules, manual, notes, decisions, journal, job statuses, findings', () => {
+test('the numeric picture survives: rules, job statuses, findings, lifts, exercises', () => {
   const findings = [{ area: 'data', severity: 'warn', title: 't', detail: 'd' }];
   const ctx = modelContext(data(), findings);
   assert.deepEqual(ctx.rules, { units: { weight: 'kg' } });
-  assert.equal(ctx.manual, 'Example manual text.');
-  assert.equal(ctx.coach_notes[0].body, 'tight hip');
-  assert.equal(ctx.decisions[0].title, 'Example decision');
-  assert.deepEqual(ctx.journal, [{ at: '2026-11-08T00:00:00Z', question: 'how is bench?', answer: 'It is fine.' }]);
   assert.deepEqual(ctx.coach_jobs.map((j) => j.status), ['done', 'failed']);
   assert.deepEqual(ctx.checker_findings, findings);
   assert.equal(ctx.lifts[0].name, 'Bench press');
-  assert.ok(ctx.exercises.some((e) => e.name === 'Bench press' && e.flag === 'example flag'));
+  assert.ok(ctx.exercises.some((e) => e.name === 'Bench press' && e.equipment === 'barbell'));
+  assert.equal(ctx.weigh_ins[0], '2026-11-09 80kg');
+});
+
+test('no free text about the owner reaches the model', () => {
+  const SENTINEL = 'ZZ-SENTINEL-';
+  const d = data();
+  d.manual = `${SENTINEL}manual`;
+  d.notes = [{ body: `${SENTINEL}coach-note`, created_at: '2026-11-05T00:00:00Z' }];
+  d.decisions = [{ date: '2026-11-01', title: `${SENTINEL}decision-title`, body: `${SENTINEL}decision-body` }];
+  d.jobs = [
+    { id: id(40), kind: 'ask', status: 'done', error: `${SENTINEL}job-error`, created_at: '2026-11-08T00:00:00Z',
+      instructions: `[mode=journal]
+${SENTINEL}journal-question`, output_md: `${SENTINEL}journal-answer` },
+  ];
+  d.sessions[0].notes = `${SENTINEL}session-note`;
+  d.sessions[0].pain = `${SENTINEL}pain`;
+  d.sessions[0].session_exercises[0].deviation_note = `${SENTINEL}deviation`;
+  d.bodyMetrics[0].notes = `${SENTINEL}weigh-in`;
+  d.activeBlock.rationale = `${SENTINEL}rationale`;
+  d.activeBlock.block_days[0].block_slots[0].notes = `${SENTINEL}slot-note`;
+  d.exercises[0].flag = `${SENTINEL}flag`;
+
+  const ctx = modelContext(d, []);
+  const text = JSON.stringify(ctx);
+  assert.doesNotMatch(text, /ZZ-SENTINEL/);
+  for (const key of ['manual', 'coach_notes', 'journal', 'decisions', 'notes', 'pain', 'rationale', 'flag', 'error', 'instructions', 'output_md']) {
+    assert.doesNotMatch(text, new RegExp(`"${key}"`), `key ${key} must not appear`);
+  }
 });
 
 test('a realistic eight weeks stays small', () => {
