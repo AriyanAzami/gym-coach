@@ -4,7 +4,7 @@
 
    Bump VERSION on every deploy so installed phones take the new shell. */
 
-const VERSION = 'v15';
+const VERSION = 'v16';
 const SHELL = `shell-${VERSION}`;
 
 const PRECACHE = [

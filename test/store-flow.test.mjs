@@ -163,3 +163,42 @@ test('an offline cold start with an expired token opens on the saved state', () 
   assert.equal(store.pickUser(null, netErr, null), null);
   assert.deepEqual(store.pickUser({ user: { id: 'u-1' } }, null, snap), { id: 'u-1' });
 });
+
+test('a set shows on the screen before a slow network answers', async () => {
+  state.sessionDetail = { session: { id: 'se-1', status: 'planned' }, exercises: [{ id: 'sx-1', session_id: 'se-1' }], sets: [] };
+  let release;
+  const held = new Promise((r) => { release = r; });
+  fake.gate = () => held;
+  const writing = store.write(setRow(1));
+  assert.deepEqual(state.sessionDetail.sets.map((s) => s.id), ['st-1'], 'shown before the network answered');
+  release();
+  await writing;
+  assert.ok(fake.tables.sets.has('st-1'));
+});
+
+test('a rejected direct write is taken back off the screen', async () => {
+  state.sessionDetail = { session: { id: 'se-1', status: 'planned' }, exercises: [{ id: 'sx-1', session_id: 'se-1' }], sets: [] };
+  fake.rejectInsert = (table) => table === 'sets';
+  await assert.rejects(store.write(setRow(1)));
+  assert.deepEqual(state.sessionDetail.sets, []);
+});
+
+test('the saved state shows at boot before any network call', () => {
+  state.loaded = true;
+  state.rules = { from: 'phone' };
+  state.sessionDetail = null;
+  store.persist();
+  Object.assign(state, { loaded: false, rules: null });
+  assert.equal(store.showSaved(), true);
+  assert.equal(state.loaded, true);
+  assert.deepEqual(state.rules, { from: 'phone' });
+});
+
+test('a finished session in the snapshot does not reopen as the workout', () => {
+  state.loaded = true;
+  state.sessionDetail = { session: { id: 'se-old', status: 'done' }, exercises: [], sets: [] };
+  store.persist();
+  Object.assign(state, { loaded: false, sessionDetail: null });
+  store.showSaved();
+  assert.equal(state.sessionDetail, null);
+});

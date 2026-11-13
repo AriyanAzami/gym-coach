@@ -3,7 +3,7 @@
    numbers per set. */
 
 import * as store from './store.js';
-import { h, fmtLoad, fmtRest, toast, sheet, closeSheet, timer, wakeLock, unlockAudio, el, q, shrinkImage } from './ui.js';
+import { h, fmtLoad, fmtRest, toast, sheet, closeSheet, timer, wakeLock, unlockAudio, el, q, shrinkImage, singleFlight } from './ui.js';
 import { nav } from './nav.js';
 import { sessionComplete, ymd, parseAppleWatchText, nextDayIndex, restForSlot } from './engine.js';
 
@@ -691,6 +691,9 @@ export const actions = {
     store.load().catch(() => {});
   },
 };
+
+// A second tap on Save while the first is still writing must not run the loop twice.
+actions['save-sets'] = singleFlight(actions['save-sets']);
 
 /* Pulls the session in when the screen is opened with a different one, or with
    none loaded yet. Also opens the Finish sheet pre-filled when launched from

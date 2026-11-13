@@ -212,6 +212,7 @@ store.onAuth(async (user) => {
     render();
     return;
   }
+  store.showSaved();
   render();
   try {
     // Flush first, so the load that follows already contains last session's sets.

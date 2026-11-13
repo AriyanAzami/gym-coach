@@ -162,7 +162,7 @@ test('the snapshot restores what Today and Log need, for the same user only', ()
   const state = {
     user: { id: 'u-1' }, rules: { a: 1 }, exercises: [{ id: 'e' }], activeBlock: { id: 'b' },
     days: [{ id: 'd' }], slots: [{ id: 's' }], liftState: [{ exercise_id: 'e' }], rotation: { day_index: 1 },
-    sessions: [{ id: 'se' }], sessionDetail: { session: { id: 'se' }, exercises: [], sets: [] },
+    sessions: [{ id: 'se' }], sessionDetail: { session: { id: 'se', status: 'planned' }, exercises: [], sets: [] },
     documents: [{ big: 'x'.repeat(10) }], journal: [{ big: true }], loaded: true,
   };
   const snap = snapshotOf(state);

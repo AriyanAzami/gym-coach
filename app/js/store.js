@@ -140,9 +140,16 @@ export function onAuth(callback) {
     lastUserId = id;
     callback(state.user);
   };
+  // The saved state opens straight away; getSession() below confirms the user
+  // or, on a clean sign-out with no network error, sends them to sign in.
+  const snap = readSnapshot();
+  if (snap?.userId) {
+    offlineUser = { id: snap.userId, offline: true };
+    notify(offlineUser);
+  }
   client().auth.getSession().then(({ data, error }) => {
-    const user = pickUser(data.session, error, readSnapshot());
-    if (user?.offline) offlineUser = user;
+    const user = pickUser(data.session, error, snap);
+    offlineUser = user?.offline ? user : null;
     notify(user);
   });
   client().auth.onAuthStateChange((event, session) => {
@@ -187,6 +194,9 @@ export function snapshotOf(s) {
 export function restoreSnapshot(s, snap) {
   if (!snap?.state || !s.user?.id || snap.userId !== s.user.id) return false;
   Object.assign(s, snap.state, { loaded: true, stale: true });
+  // Only a workout still in progress reopens; a finished one is history.
+  const open = s.sessionDetail?.session?.status;
+  if (open !== 'planned' && open !== 'partial') s.sessionDetail = null;
   return true;
 }
 
@@ -229,6 +239,16 @@ function fallBackToLocal(err) {
     return;
   }
   throw err;
+}
+
+/* Renders the phone's saved state at once, before any network call. With a
+   dead signal that still reports online, the token refresh and the load can
+   each take until their timeout; the plan should not wait for them. */
+export function showSaved() {
+  if (state.loaded || !restoreSnapshot(state, readSnapshot())) return false;
+  syncPending();
+  emit('loaded');
+  return true;
 }
 
 export async function load() {
@@ -557,23 +577,29 @@ async function send(op) {
 export async function write(input) {
   const op = withIds(input);
   const behind = outbox.size() > 0;
+  // Shown before it is sent, so a slow network never hides a tapped set. A
+  // rejection puts the screen back as it was.
+  const before = { sessions: structuredClone(state.sessions), sessionDetail: structuredClone(state.sessionDetail) };
+  mirror(state, op);
+  emit('pending');
   if (state.online && !behind) {
     try {
       const saved = await send(op);
-      mirror(state, op);
       persist();
       return saved;
     } catch (err) {
       if (err.landed) {
-        mirror(state, op);
         persist();
         return null;
       }
-      if (err.permanent) throw err;
+      if (err.permanent) {
+        Object.assign(state, before);
+        emit('pending');
+        throw err;
+      }
     }
   }
   outbox.queue(op);
-  mirror(state, op);
   persist();
   syncPending();
   emit('pending');
