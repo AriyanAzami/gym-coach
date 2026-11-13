@@ -80,6 +80,26 @@
         "partials_count": {
           "description": "false: a partial rep never counts toward clearing a rep range.",
           "type": "boolean"
+        },
+        "backoff": {
+          "description": "Optional. When at least below_min_fraction of the last exposure's countable working sets fell under the slot's rep_min, the next target drops one increment and resets to rep_min, labelled with label. Absent: reps below the range change nothing.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "below_min_fraction",
+            "label"
+          ],
+          "properties": {
+            "below_min_fraction": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
       }
     },

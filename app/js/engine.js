@@ -179,12 +179,26 @@ export function nextTarget({ slot, exercise, state, similar, rules }) {
       : slot.rep_min;
   }
 
+  let label = stallLabel(state, rules);
+  const backoff = rules.progression.backoff;
+  if (backoff && !cleared && countable.length > 0 && weight !== null) {
+    const short = countable.filter((r) => r < slot.rep_min).length;
+    if (short / countable.length >= backoff.below_min_fraction) {
+      const inc = incrementFor(exercise, rules);
+      const step = toUnit(inc.value, inc.unit, state.last_unit);
+      const lowered = round2(weight - step);
+      if (lowered >= step) weight = lowered;
+      reps = slot.rep_min;
+      label = backoff.label;
+    }
+  }
+
   return {
     ...common,
     weight,
     unit: state.last_unit ?? rules?.units?.weight ?? 'lb',
     reps,
-    label: stallLabel(state, rules),
+    label,
     lastLogged: {
       weight: state.last_weight ?? null,
       unit: state.last_unit ?? null,
@@ -468,4 +482,46 @@ export function parseAppleWatchText(raw) {
   }
 
   return out;
+}
+
+/* Whether the rules call for a deload now. Reads the triggers from
+   rules.deload and the stall trigger from rules.stall; `today` is injected. */
+export function deloadDue({ liftState, sessions, activeBlock, rules, today }) {
+  const reasons = [];
+  const triggers = rules?.deload?.triggers ?? {};
+  const stallAt = rules?.stall?.sessions_to_trigger;
+
+  const stalled = (liftState ?? [])
+    .filter((s) => s.active !== false && typeof stallAt === 'number' && (s.stall_count ?? 0) >= stallAt);
+  if (typeof triggers.stalled_exercises === 'number' && stalled.length >= triggers.stalled_exercises) {
+    reasons.push({
+      code: 'stalls',
+      text: `${stalled.length} lifts stalled; the rules call a deload at ${triggers.stalled_exercises}.`,
+    });
+  }
+
+  const lastTrained = (sessions ?? [])
+    .filter((s) => s.kind === 'training' && (s.status === 'done' || s.status === 'partial'))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  if (lastTrained && typeof triggers.effort_above === 'number'
+      && typeof lastTrained.effort_1_10 === 'number' && lastTrained.effort_1_10 > triggers.effort_above) {
+    reasons.push({
+      code: 'effort',
+      text: `Effort ${lastTrained.effort_1_10}/10 on ${lastTrained.date}; the rules flag anything above ${triggers.effort_above}.`,
+    });
+  }
+
+  const backstop = rules?.deload?.backstop_weeks;
+  if (activeBlock?.starts_on && typeof backstop === 'number') {
+    const utc = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10));
+    const weeks = Math.floor(Math.round((utc(today) - utc(activeBlock.starts_on)) / 86400000) / 7);
+    if (weeks >= backstop) {
+      reasons.push({
+        code: 'backstop',
+        text: `The active block started ${weeks} weeks ago; the rules backstop is ${backstop} weeks.`,
+      });
+    }
+  }
+
+  return { due: reasons.length > 0, reasons };
 }

@@ -261,3 +261,54 @@ test('an opener keeps the raw value when the rules have no increment', () => {
   const t = opener(bar('ex-new', { equipment: 'sled' }), [{ ...sibling(135), equipment: 'sled' }]);
   assert.equal(t.weight, 94.5);
 });
+
+const withBackoff = (extra = {}) => ({
+  ...rules,
+  progression: { ...rules.progression, backoff: { below_min_fraction: 0.5, label: 'backed off', ...extra } },
+});
+
+test('back-off: enough sets under rep_min drops one increment and resets to rep_min', () => {
+  const t = target({ rules: withBackoff(), state: exposure(100, [6, 6, 8]) });
+  assert.equal(t.weight, 90);
+  assert.equal(t.reps, 8);
+  assert.equal(t.label, 'backed off');
+});
+
+test('back-off: below the fraction behaves as before', () => {
+  const t = target({ rules: withBackoff(), state: exposure(100, [8, 8, 6]) });
+  assert.equal(t.weight, 100);
+  assert.equal(t.reps, 8);
+  assert.equal(t.label, null);
+});
+
+test('back-off: absent from the rules changes nothing', () => {
+  const t = target({ state: exposure(100, [6, 6, 6]) });
+  assert.equal(t.weight, 100);
+  assert.equal(t.reps, 8);
+  assert.equal(t.label, null);
+});
+
+test('back-off: wins over the stall label', () => {
+  const t = target({ rules: withBackoff(), state: exposure(100, [5, 5, 5], { stall_count: 3 }) });
+  assert.equal(t.label, 'backed off');
+  assert.equal(t.weight, 90);
+});
+
+test('back-off: converts the increment into the load unit', () => {
+  const t = target({ rules: withBackoff(), state: exposure(50, [6, 6, 6], { last_unit: 'kg' }) });
+  assert.equal(t.unit, 'kg');
+  assert.equal(t.weight, 45.46);
+});
+
+test('back-off: never drops below one increment, the weight is kept', () => {
+  const t = target({ rules: withBackoff(), state: exposure(15, [6, 6, 6]) });
+  assert.equal(t.weight, 15);
+  assert.equal(t.reps, 8);
+  assert.equal(t.label, 'backed off');
+});
+
+test('back-off: partials follow the same countable logic as progression', () => {
+  const state = exposure(100, [8, 8, 8], { last_reps: [8, 8, 3], last_full_reps: [8, 8, null] });
+  const t = target({ rules: withBackoff({ below_min_fraction: 1 }), state });
+  assert.equal(t.weight, 100, 'the partial is not countable, so 0 of 2 sets were short');
+});

@@ -14,7 +14,11 @@
     },
     "increment_unit": "lb",
     "most_recent_entry_decides": true,
-    "partials_count": false
+    "partials_count": false,
+    "backoff": {
+      "below_min_fraction": 0.5,
+      "label": "backed off"
+    }
   },
   "stall": {
     "sessions_to_trigger": 3,

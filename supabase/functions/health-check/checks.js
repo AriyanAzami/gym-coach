@@ -6,7 +6,7 @@
    the app's, because a deployed edge function can only import its own folder.
    test/health-function.test.mjs fails if they drift. */
 
-import { toUnit, volumeVsTarget, isoWeekStart, addDays } from './engine.js';
+import { toUnit, volumeVsTarget, isoWeekStart, addDays, deloadDue } from './engine.js';
 import { validateRulesWith } from './rules-check.js';
 
 const LB_PER_KG = toUnit(1, 'kg', 'lb');
@@ -50,28 +50,17 @@ function trainingChecks(d) {
       stalled.map((s) => `${s.name} (${s.stall_count} sessions)`).join(', ')));
   }
 
-  const triggers = rules.deload?.triggers ?? {};
-  if (typeof triggers.stalled_exercises === 'number' && stalled.length >= triggers.stalled_exercises) {
-    out.push(finding('training', 'bad', 'deload_stalls', 'Deload due: too many stalls',
-      `${stalled.length} lifts stalled; the rules call a deload at ${triggers.stalled_exercises}.`));
-  }
-
-  const lastTrained = (d.sessions ?? [])
-    .filter((s) => s.kind === 'training' && (s.status === 'done' || s.status === 'partial'))
-    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
-  if (lastTrained && typeof triggers.effort_above === 'number'
-      && typeof lastTrained.effort_1_10 === 'number' && lastTrained.effort_1_10 > triggers.effort_above) {
-    out.push(finding('training', 'warn', 'deload_effort', 'Last session felt too hard',
-      `Effort ${lastTrained.effort_1_10}/10 on ${lastTrained.date}; the rules flag anything above ${triggers.effort_above}.`));
-  }
-
-  const backstop = rules.deload?.backstop_weeks;
-  if (d.activeBlock?.starts_on && typeof backstop === 'number') {
-    const weeks = Math.floor(daysBetween(d.activeBlock.starts_on, today) / 7);
-    if (weeks >= backstop) {
-      out.push(finding('training', 'warn', 'deload_backstop', 'Long time without a deload',
-        `The active block started ${weeks} weeks ago; the rules backstop is ${backstop} weeks.`));
-    }
+  const deload = deloadDue({
+    liftState: d.liftState, sessions: d.sessions, activeBlock: d.activeBlock, rules, today,
+  });
+  const DELOAD = {
+    stalls: ['bad', 'deload_stalls', 'Deload due: too many stalls'],
+    effort: ['warn', 'deload_effort', 'Last session felt too hard'],
+    backstop: ['warn', 'deload_backstop', 'Long time without a deload'],
+  };
+  for (const r of deload.reasons) {
+    const [severity, code, title] = DELOAD[r.code];
+    out.push(finding('training', severity, code, title, r.text));
   }
 
   const gap = rules.rotation?.gap_flag_days;

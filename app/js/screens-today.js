@@ -3,9 +3,9 @@
    is asked of a model. */
 
 import * as store from './store.js';
-import { h, cleanText, fmtLoad, fmtDate, fmtRest, toast, sheet, closeSheet, confirm, el, singleFlight } from './ui.js';
+import { h, cleanText, fmtLoad, fmtDate, fmtRest, encodeJobPrompt, toast, sheet, closeSheet, confirm, el, singleFlight } from './ui.js';
 import { nav } from './nav.js';
-import { planForDay, volumeVsTarget, ymd, isoWeekStart, nextDayIndex } from './engine.js';
+import { planForDay, volumeVsTarget, ymd, isoWeekStart, nextDayIndex, deloadDue } from './engine.js';
 
 /* Which day the rotation points at. The view answers this; with no answer and
    days present, fall back to the first day rather than showing nothing. */
@@ -44,6 +44,36 @@ function unfinishedBanner() {
       <button class="btn primary" data-action="finish-unfinished" data-id="${h(s.id)}">Finish it</button>
     </div>
   </div>`;
+}
+
+const DELOAD_MARKER = 'Deload week:';
+const DELOAD_JOB_WINDOW_MS = 7 * 86400000;
+
+function deloadReasons() {
+  const { rules, activeBlock, jobs, liftState, sessions } = store.state;
+  if (!rules || /deload/i.test(activeBlock?.name ?? '')) return [];
+  const asked = (jobs ?? []).some((j) => String(j.instructions ?? '').includes(DELOAD_MARKER)
+    && j.status !== 'failed'
+    && Date.now() - Date.parse(j.created_at) < DELOAD_JOB_WINDOW_MS);
+  if (asked) return [];
+  return deloadDue({ liftState, sessions, activeBlock, rules, today: ymd(new Date()) }).reasons;
+}
+
+function deloadBanner() {
+  const reasons = deloadReasons();
+  if (reasons.length === 0) return '';
+  return `<div class="card">
+    <div class="eyebrow">Deload due</div>
+    ${reasons.map((r) => `<p class="small">${h(r.text)}</p>`).join('')}
+    <button class="btn primary full" data-action="ask-deload">Ask the coach for a deload week</button>
+  </div>`;
+}
+
+export function deloadInstructions(reasons, rules) {
+  const fired = reasons.map((r) => `- ${r.text}`).join('\n');
+  return encodeJobPrompt({
+    instructions: `${DELOAD_MARKER} write a one-week deload version of the active block: the same exercises and days, with sets cut by a factor of ${rules.deload.set_factor}. Triggers that fired:\n${fired}`,
+  });
 }
 
 function empty(title, body, tab, cta) {
@@ -200,7 +230,7 @@ export function render() {
   }
 
   const warning = plan.reason ? `<div class="banner bad">${h(plan.reason)}</div>` : '';
-  return head + unfinishedBanner() + warning + planCard(plan, todaysSession()) + statsCard() + volumeCard();
+  return head + deloadBanner() + unfinishedBanner() + warning + planCard(plan, todaysSession()) + statsCard() + volumeCard();
 }
 
 /* Starting a session freezes the plan the owner just read: one
@@ -257,6 +287,16 @@ async function startSession() {
 
 export const actions = {
   'start-session': singleFlight(startSession),
+  'ask-deload': singleFlight(async () => {
+    const reasons = deloadReasons();
+    if (reasons.length === 0) return;
+    try {
+      await store.dispatchJob('block', deloadInstructions(reasons, store.state.rules));
+      toast('Sent to the coach');
+    } catch (err) {
+      toast(err.message ?? 'Could not send the job', 'bad');
+    }
+  }),
   'resume-session': (node) => nav.go('workout', { sessionId: node.dataset.id }),
   'finish-unfinished': (node) => nav.go('workout', { sessionId: node.dataset.id, openFinish: true }),
   'discard-unfinished': async (node) => {

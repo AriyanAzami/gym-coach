@@ -2,7 +2,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { state } from '../app/js/store.js';
-import { render } from '../app/js/screens-today.js';
+import { render, deloadInstructions } from '../app/js/screens-today.js';
 import rulesExample from '../supabase/seed/rules.example.json' with { type: 'json' };
 import { ymd } from '../app/js/engine.js';
 
@@ -185,4 +185,69 @@ test('no unfinished banner when every earlier session was finished', () => {
 test('today\'s own open session is not called unfinished', () => {
   reset({ sessions: [{ id: 'now', date: ymd(new Date()), kind: 'training', status: 'planned' }] });
   assert.doesNotMatch(render(), /Unfinished workout/);
+});
+
+const STALLED = ['ex-1', 'ex-2', 'ex-3'].map((id, i) => ({ ...LIFT_STATE[0], exercise_id: id, name: `Lift ${i}`, stall_count: 4 }));
+const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString();
+const deloadJob = (over = {}) => ({
+  id: 'j-1', kind: 'block', status: 'done', created_at: daysAgo(2),
+  instructions: '[model=opus effort=high]\nDeload week: write one.', ...over,
+});
+
+test('a deload banner shows above the plan with one line per reason', () => {
+  reset({
+    liftState: STALLED,
+    sessions: [{ id: 'h1', date: ymd(new Date()), kind: 'training', status: 'done', effort_1_10: 10 }],
+  });
+  const html = render();
+  assert.match(html, /Deload due/);
+  assert.match(html, /3 lifts stalled/);
+  assert.match(html, /Effort 10\/10/);
+  assert.match(html, /data-action="ask-deload"/);
+  assert.ok(html.indexOf('Deload due') < html.indexOf('Next up'));
+});
+
+test('no deload banner when nothing is due', () => {
+  assert.doesNotMatch(render(), /Deload due|ask-deload/);
+});
+
+test('a recent, non-failed deload job hides the banner', () => {
+  for (const status of ['queued', 'running', 'done']) {
+    reset({ liftState: STALLED, jobs: [deloadJob({ status })] });
+    assert.doesNotMatch(render(), /ask-deload/, status);
+  }
+});
+
+test('a failed or week-old deload job does not hide the banner', () => {
+  reset({ liftState: STALLED, jobs: [deloadJob({ status: 'failed' })] });
+  assert.match(render(), /ask-deload/);
+  reset({ liftState: STALLED, jobs: [deloadJob({ created_at: daysAgo(8) })] });
+  assert.match(render(), /ask-deload/);
+  reset({ liftState: STALLED, jobs: [deloadJob({ instructions: 'something else' })] });
+  assert.match(render(), /ask-deload/);
+});
+
+test('the banner stays hidden while the active block is a deload', () => {
+  reset({ liftState: STALLED, activeBlock: { id: 'bl-1', name: 'Autumn DELOAD week', status: 'active' } });
+  assert.doesNotMatch(render(), /ask-deload/);
+});
+
+test('the backstop reason uses the block start date', () => {
+  reset({ activeBlock: { id: 'bl-1', name: 'Autumn block', status: 'active', starts_on: '2000-01-03' } });
+  assert.match(render(), /weeks ago; the rules backstop/);
+});
+
+test('deload reasons are HTML-escaped', () => {
+  reset({ sessions: [{ id: 'h1', date: '<img src=x onerror=alert(1)>', kind: 'training', status: 'done', effort_1_10: 10 }] });
+  const html = render();
+  assert.match(html, /ask-deload/);
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /&lt;img src=x/);
+});
+
+test('the deload job instructions carry the marker, the factor and the reasons', () => {
+  const text = deloadInstructions([{ code: 'stalls', text: '3 lifts stalled.' }], rulesExample);
+  assert.match(text, /^\[model=opus effort=high\]\nDeload week:/);
+  assert.match(text, new RegExp(`${rulesExample.deload.set_factor}`));
+  assert.match(text, /3 lifts stalled\./);
 });
