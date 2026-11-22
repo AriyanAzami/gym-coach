@@ -2,7 +2,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { state } from '../app/js/store.js';
-import { render, statusFor, finishSheet, setsEditor, hrZonesPayload, SKIPPED_NOTE, prescribedRows } from '../app/js/screens-workout.js';
+import { render, statusFor, finishSheet, setsEditor, hrZonesPayload, SKIPPED_NOTE, prescribedRows, isSkippedRow } from '../app/js/screens-workout.js';
 import { parseAppleWatchText } from '../app/js/engine.js';
 import rulesExample from '../supabase/seed/rules.example.json' with { type: 'json' };
 
@@ -223,6 +223,21 @@ test('the set editor offers adding a set beyond the target count', () => {
   const html = setsEditor('sx-1');
   assert.match(html, /data-action="add-set"/);
   assert.match(html, /data-count="3"/);
+});
+
+test('every set row has a skip button', () => {
+  const html = setsEditor('sx-1');
+  assert.equal((html.match(/data-action="skip-set"/g) ?? []).length, 3);
+});
+
+test('a blank or zero-and-zero row is a skipped set, not a logged one', () => {
+  assert.equal(isSkippedRow('', ''), true);
+  assert.equal(isSkippedRow('0', '0'), true);
+  assert.equal(isSkippedRow('', '0'), true);
+  assert.equal(isSkippedRow('0', ''), true);
+  assert.equal(isSkippedRow('45', '0'), false);
+  assert.equal(isSkippedRow('45', '10'), false);
+  assert.equal(isSkippedRow('', '10'), false);
 });
 
 test('hr zones payload is null when there is nothing to store', () => {

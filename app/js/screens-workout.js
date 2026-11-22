@@ -194,6 +194,14 @@ export function finishSheet(session, prefill = {}) {
     </div>`;
 }
 
+/* A set the athlete did not do: both boxes empty, or the 0 and 0 that used to be
+   typed to mean the same thing. It is never stored, so it cannot read as a
+   failed set when the next target is worked out. */
+export function isSkippedRow(weight, reps) {
+  const empty = (v) => v === '' || v === null || v === undefined || Number(v) === 0;
+  return empty(reps) && empty(weight);
+}
+
 function setRowHtml(n, { weight = '', reps = '', unit = '', perHand = false, partial = false }) {
   return `<div class="row" style="margin-bottom:8px" data-set="${n}">
       <span class="mono muted" style="width:20px">${n}</span>
@@ -203,6 +211,7 @@ function setRowHtml(n, { weight = '', reps = '', unit = '', perHand = false, par
       <label class="row small" style="margin:0;white-space:nowrap">
         <input type="checkbox" id="p-${n}" style="width:auto;min-height:auto" ${partial ? 'checked' : ''}> partial
       </label>
+      <button type="button" class="btn sm ghost" data-action="skip-set" data-n="${n}">Skip</button>
     </div>`;
 }
 
@@ -527,6 +536,14 @@ export const actions = {
     }));
   },
 
+  'skip-set': (node) => {
+    const n = node.dataset.n;
+    el(`w-${n}`).value = '';
+    el(`r-${n}`).value = '';
+    el(`p-${n}`).checked = false;
+    toast(`Set ${n} skipped — Save sets to keep it`);
+  },
+
   'rest': (node) => timer.start(Number(node.dataset.s), 'Rest'),
 
   'save-sets': async (node) => {
@@ -542,7 +559,7 @@ export const actions = {
       const partial = el(`p-${n}`).checked;
       const was = existing.find((s) => s.set_no === n);
 
-      if (reps === '' && weight === '') {
+      if (isSkippedRow(weight, reps)) {
         if (was) await store.write({ table: 'sets', action: 'delete', id: was.id });
         continue;
       }
