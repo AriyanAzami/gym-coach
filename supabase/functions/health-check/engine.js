@@ -525,3 +525,25 @@ export function deloadDue({ liftState, sessions, activeBlock, rules, today }) {
 
   return { due: reasons.length > 0, reasons };
 }
+
+/* Which readings off a body-weight screenshot still need logging. A date that
+   already has a weigh-in is left alone; if the stored number disagrees with the
+   screenshot it is reported, never overwritten. */
+export function newWeighIns(read, existing) {
+  const byDate = new Map((existing ?? []).map((m) => [m.date, m]));
+  const add = [];
+  const alreadyLogged = [];
+  const disagree = [];
+  for (const r of read ?? []) {
+    const have = byDate.get(r.date);
+    if (!have) {
+      add.push(r);
+    } else {
+      alreadyLogged.push(r);
+      if (have.unit === r.unit && Math.abs(Number(have.weight) - r.weight) > 0.05) {
+        disagree.push({ date: r.date, stored: Number(have.weight), read: r.weight, unit: r.unit });
+      }
+    }
+  }
+  return { add, alreadyLogged, disagree };
+}

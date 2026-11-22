@@ -764,6 +764,25 @@ export async function readWatchShots(paths) {
   return body;
 }
 
+/* Asks the read-weight-shots function for the dated weights on Apple Health
+   screenshots already uploaded. Returns { result: { entries }, model }; writes nothing. */
+export async function readWeightShots(paths, today) {
+  const { data: { session } } = await client().auth.getSession();
+  if (!session) throw new Error('not signed in');
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/read-weight-shots`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${session.access_token}`,
+      apikey: SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ paths, today }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error ?? `could not read the screenshots (${response.status})`);
+  return body;
+}
+
 /* Screenshots already in a session's folder, including ones uploaded before
    the form could read them. */
 export async function listSessionShots(sessionId) {

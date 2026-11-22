@@ -251,3 +251,10 @@ test('the deload job instructions carry the marker, the factor and the reasons',
   assert.match(text, new RegExp(`${rulesExample.deload.set_factor}`));
   assert.match(text, /3 lifts stalled\./);
 });
+
+test('the weigh-in sheet offers reading Apple Health screenshots', async () => {
+  const { weightSheet } = await import('../app/js/screens-today.js');
+  const html = weightSheet();
+  assert.match(html, /data-action="read-weight-shots"/);
+  assert.match(html, /id="bw-status"/);
+});

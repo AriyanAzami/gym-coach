@@ -23,3 +23,7 @@ verify_jwt = false
 # Called by the signed-in app with its session token.
 [functions.read-watch-shots]
 verify_jwt = true
+
+# Called by the signed-in app with its session token.
+[functions.read-weight-shots]
+verify_jwt = true

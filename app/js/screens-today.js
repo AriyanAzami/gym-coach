@@ -3,9 +3,9 @@
    is asked of a model. */
 
 import * as store from './store.js';
-import { h, cleanText, fmtLoad, fmtDate, fmtRest, encodeJobPrompt, toast, sheet, closeSheet, confirm, el, singleFlight } from './ui.js';
+import { h, cleanText, fmtLoad, fmtDate, fmtRest, encodeJobPrompt, toast, sheet, closeSheet, confirm, el, singleFlight, shrinkImage } from './ui.js';
 import { nav } from './nav.js';
-import { planForDay, volumeVsTarget, ymd, isoWeekStart, nextDayIndex, deloadDue } from './engine.js';
+import { planForDay, volumeVsTarget, ymd, isoWeekStart, nextDayIndex, deloadDue, newWeighIns } from './engine.js';
 
 /* Which day the rotation points at. The view answers this; with no answer and
    days present, fall back to the first day rather than showing nothing. */
@@ -174,6 +174,11 @@ export function weightSheet() {
       </select></label>
     </div>
     <label>Notes (optional)<input id="bw-notes" type="text" placeholder="e.g. morning fasted"></label>
+    <label class="btn sm full" style="margin:0 0 10px;cursor:pointer">
+      <input id="bw-shots" type="file" accept="image/*" multiple data-action="read-weight-shots" style="display:none">
+      Add from Apple Health screenshot(s)
+    </label>
+    <p id="bw-status" class="small muted" role="status"></p>
     <div class="grid2">
       <button class="btn ghost" data-sheet="cancel">Cancel</button>
       <button class="btn primary" data-action="save-weight">Save</button>
@@ -307,6 +312,34 @@ export const actions = {
     nav.refresh();
   },
   'log-weight': () => sheet(weightSheet()),
+  'read-weight-shots': async (node) => {
+    const picked = Array.from(node.files ?? []);
+    if (picked.length === 0) return;
+    const say = (text) => { const s = el('bw-status'); if (s) s.textContent = text; };
+    say('Reading the screenshots…');
+    try {
+      const files = await Promise.all(picked.map((f) => shrinkImage(f)));
+      const paths = await store.uploadSessionShots('weight', files);
+      const { result } = await store.readWeightShots(paths, ymd(new Date()));
+      const { add, alreadyLogged, disagree } = newWeighIns(result?.entries ?? [], store.state.bodyMetrics);
+      for (const e of add) {
+        await store.write({ table: 'body_metrics', action: 'insert', row: { date: e.date, weight: e.weight, unit: e.unit, notes: 'from Apple Health' } });
+      }
+      await store.load();
+      nav.refresh();
+      if ((result?.entries ?? []).length === 0) {
+        say('No weights could be read from that screenshot.');
+        return;
+      }
+      const clash = disagree.length > 0
+        ? ` ${disagree.length} date${disagree.length === 1 ? '' : 's'} differ from what you logged (${disagree.map((d) => `${d.date}: ${d.stored} vs ${d.read} ${d.unit}`).join('; ')}) and were left alone.`
+        : '';
+      say(`Added ${add.length}, already logged ${alreadyLogged.length}.${clash}`);
+      toast(add.length > 0 ? `Added ${add.length} weigh-in${add.length === 1 ? '' : 's'}` : 'Nothing new to add');
+    } catch (err) {
+      say(`Could not read them: ${err.message ?? 'error'}`);
+    }
+  },
   'save-weight': async () => {
     const raw = el('bw-weight')?.value ?? '';
     const weight = Number(raw);
