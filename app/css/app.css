@@ -979,3 +979,29 @@ input.from-watch { border-color: var(--accent); box-shadow: 0 0 0 2px var(--acce
 ul.plain { list-style: none; padding: 0; margin: 0 0 12px; }
 ul.plain li { padding: 10px 0; border-bottom: 1px solid var(--line); }
 ul.plain li .btn { margin-top: 6px; }
+
+/* ---- body weight chart ---- */
+.chart .dot.on { stroke: var(--text); stroke-width: 2.5; }
+.chart .guide { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart .guide[hidden] { display: none; }
+.chart-hover { position: relative; }
+.chart-hover svg { touch-action: pan-y; cursor: crosshair; }
+.chart-tip {
+  position: absolute;
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: var(--mono);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  z-index: 2;
+}
+.chart-tip[hidden] { display: none; }
+.body-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 10px; }
+.body-now { margin-bottom: 6px; }
+.body-now-num { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.02em; }

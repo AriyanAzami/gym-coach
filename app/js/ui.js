@@ -1,3 +1,4 @@
+import { hoverChart } from './charts.js';
 /* Rendering helpers: escaping, sheets, toasts, a rest timer. No data logic. */
 
 export const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
@@ -462,6 +463,22 @@ export function wireChrome(actions) {
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && el('sheet-root').classList.contains('show')) closeSheet(false);
+  });
+  const overChart = (event) => event.target.closest?.('.chart-hover svg')?.closest('.chart-hover');
+  for (const type of ['pointermove', 'pointerdown']) {
+    document.addEventListener(type, (event) => {
+      const fig = overChart(event);
+      if (fig) hoverChart(fig, event.clientX);
+    });
+  }
+  document.addEventListener('pointerleave', (event) => {
+    const fig = overChart(event);
+    if (fig) hoverChart(fig, null);
+  }, true);
+  document.addEventListener('pointerup', (event) => {
+    if (event.pointerType === 'mouse') return;
+    const fig = overChart(event);
+    if (fig) setTimeout(() => hoverChart(fig, null), 2500);
   });
   el('sheet-backdrop').addEventListener('click', () => closeSheet(false));
   el('timer-plus').addEventListener('click', () => timer.adjust(30));

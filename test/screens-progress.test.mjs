@@ -2,7 +2,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { state } from '../app/js/store.js';
-import { render } from '../app/js/screens-progress.js';
+import { render, weightPoints } from '../app/js/screens-progress.js';
 import rulesExample from '../supabase/seed/rules.example.json' with { type: 'json' };
 import { isoWeekStart, ymd } from '../app/js/engine.js';
 
@@ -116,4 +116,42 @@ test('rendering never throws on an empty database', () => {
     weeklyVolume: [], bodyTrend: [], trainingRate: null,
   });
   assert.doesNotThrow(() => render({}));
+});
+
+// ---- body weight card ----
+
+const WEIGHINS = [
+  { date: '2026-11-04', weight: 92.2, unit: 'kg', notes: null },
+  { date: '2026-11-12', weight: 100, unit: 'lb', notes: null },
+  { date: '2026-11-12', weight: 50, unit: 'kg', notes: 'older duplicate day' },
+];
+
+test('the body weight card shows kg by default with a kg/lb switch', () => {
+  reset({ bodyMetrics: WEIGHINS });
+  const html = render({});
+  assert.match(html, /data-action="body-unit" data-unit="kg"[^>]*aria-pressed="true"/);
+  assert.match(html, /data-action="body-unit" data-unit="lb"[^>]*aria-pressed="false"/);
+  assert.match(html, /chart-hover/);
+  assert.match(html, /92\.2 kg/);
+});
+
+test('switching to lb converts every reading and the rate', () => {
+  reset({ bodyMetrics: WEIGHINS });
+  const html = render({ bodyUnit: 'lb' });
+  assert.match(html, /data-unit="lb"[^>]*aria-pressed="true"/);
+  assert.match(html, /203\.\d lb/);
+  assert.doesNotMatch(html, /92\.2 kg/);
+  render({ bodyUnit: 'kg' });
+});
+
+test('weightPoints keeps one reading per day, oldest first, converted', () => {
+  const pts = weightPoints(WEIGHINS, [], 'kg');
+  assert.deepEqual(pts.map((p) => p.date), ['2026-11-04', '2026-11-12']);
+  assert.equal(pts[1].y, 45.36);
+  assert.deepEqual(weightPoints([{ date: '2026-11-04', weight: null, unit: null }], [], 'kg'), []);
+});
+
+test('with no individual weigh-ins the weekly averages are charted', () => {
+  reset({ bodyMetrics: [] });
+  assert.match(render({ bodyUnit: 'kg' }), /70\.4 kg/);
 });

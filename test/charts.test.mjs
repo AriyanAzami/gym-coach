@@ -1,7 +1,7 @@
 /* All numbers below are fabricated. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { line, bars } from '../app/js/charts.js';
+import { line, bars, weightChart, nearestPoint } from '../app/js/charts.js';
 import { readFileSync } from 'node:fs';
 
 const css = readFileSync('app/css/app.css', 'utf8');
@@ -164,4 +164,45 @@ test('a row whose value exceeds the widest target still fits the chart', () => {
   const track = Number(svg.match(/class="bar-track"[\s\S]*?width="([\d.]+)"/)[1]);
   const fill = Number(svg.match(/class="bar-fill[^"]*"[\s\S]*?width="([\d.]+)"/)[1]);
   assert.ok(fill <= track, `a bar overflowed its track: ${fill} > ${track}`);
+});
+
+// ---- weightChart ----
+
+const readings = [
+  { date: '2026-10-01', y: 80.0 },
+  { date: '2026-10-03', y: 80.4 },
+  { date: '2026-11-01', y: 81.2 },
+];
+
+test('the weight chart spaces dots by calendar date, not by count', () => {
+  const svg = weightChart(readings, { title: 'w', unit: 'kg' });
+  const xs = [...svg.matchAll(/<circle class="dot" data-i="\d" cx="([\d.]+)"/g)].map((m) => Number(m[1]));
+  assert.equal(xs.length, 3);
+  assert.ok(xs[1] - xs[0] < (xs[2] - xs[1]) / 5, 'two days apart is far closer than a month apart');
+});
+
+test('every dot has a tooltip with its date and weight in the shown unit', () => {
+  const svg = weightChart(readings, { title: 'w', unit: 'lb' });
+  assert.equal([...svg.matchAll(/<title>[^<]*80\.4 lb<\/title>/g)].length, 1);
+  assert.match(svg, /data-chart-points=/);
+  assert.match(svg, /class="chart-tip"/);
+});
+
+test('the weight chart has an empty state, escapes titles and styles every class', () => {
+  assert.match(weightChart([], { title: 'w' }), /Nothing logged yet/);
+  const nasty = weightChart(readings, { title: '<img src=x onerror=alert(1)>' });
+  assert.doesNotMatch(nasty, /<img src=x/);
+  assertClassesStyled(nasty);
+  assert.match(css, /\.chart-tip[\s,.:{]/);
+});
+
+test('one reading draws a lone dot and a flat series does not divide by zero', () => {
+  assert.doesNotMatch(weightChart([readings[0]], { title: 'w' }), /NaN/);
+  assert.doesNotMatch(weightChart([readings[0], { date: '2026-10-09', y: 80 }], { title: 'w' }), /NaN|Infinity/);
+});
+
+test('nearestPoint picks the closest x', () => {
+  assert.equal(nearestPoint([10, 50, 300], 40), 1);
+  assert.equal(nearestPoint([10, 50, 300], 400), 2);
+  assert.equal(nearestPoint([], 5), -1);
 });

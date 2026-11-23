@@ -148,3 +148,118 @@ export function bars(rows, { title = '', width = 500, rowHeight = 32 } = {}) {
     </svg>
   </figure>`;
 }
+
+/* Body weight over real calendar time, one dot per logged day. Unlike `line`, the
+   x axis is proportional to the date, so a gap in logging looks like a gap.
+   Every dot carries its own tooltip text; `hoverChart` (below) shows it in a box
+   when the pointer or a finger is near that dot. points: [{ date, y }] in the
+   unit being shown. */
+const MS_DAY = 86_400_000;
+const dayNumber = (ymd) => Math.round(Date.parse(`${ymd}T00:00:00Z`) / MS_DAY);
+const dayText = (n) => new Date(n * MS_DAY).toISOString().slice(0, 10);
+const shortDate = (ymd) => {
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+export function weightChart(points, { title = '', unit = 'kg', width = 500, height = 210 } = {}) {
+  if (!points || points.length === 0) return EMPTY(title, width, height);
+
+  const pad = { top: 16, right: 14, bottom: 28, left: 40 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const round = (n) => Math.round(n * 10) / 10;
+
+  const ys = points.map((p) => Number(p.y));
+  const days = points.map((p) => dayNumber(p.date));
+  const rawLo = Math.min(...ys);
+  const rawHi = Math.max(...ys);
+  const margin = (rawHi - rawLo || 1) * 0.15;
+  const lo = rawLo - margin;
+  const hi = rawHi + margin;
+  const firstDay = days[0];
+  const dayRange = days.at(-1) - firstDay;
+
+  const xAt = (d) => (dayRange === 0 ? pad.left + plotW / 2 : pad.left + ((d - firstDay) / dayRange) * plotW);
+  const yAt = (v) => pad.top + plotH - ((v - lo) / (hi - lo)) * plotH;
+  const coords = points.map((p, i) => [xAt(days[i]), yAt(Number(p.y))]);
+
+  const grid = [0, 0.5, 1].map((f) => {
+    const y = pad.top + plotH * f;
+    return `<line class="grid" x1="${pad.left}" y1="${round(y)}" x2="${pad.left + plotW}" y2="${round(y)}"/>`
+      + `<text class="ax" x="${pad.left - 6}" y="${round(y + 3)}" text-anchor="end">${round(lo + (hi - lo) * (1 - f)).toFixed(1)}</text>`;
+  }).join('');
+
+  const bottomY = round(pad.top + plotH);
+  const pts = coords.map(([x, y]) => `${round(x)},${round(y)}`).join(' ');
+  const area = points.length > 1
+    ? `<polygon class="series-area" points="${round(coords[0][0])},${bottomY} ${pts} ${round(coords.at(-1)[0])},${bottomY}"/>`
+    : '';
+  const path = points.length > 1
+    ? `<polyline class="series" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${pts}"/>`
+    : '';
+
+  const tipFor = (p) => `${shortDate(p.date)} · ${Number(p.y).toFixed(1)} ${unit}`;
+  const marks = points.map((p, i) => `<circle class="dot" data-i="${i}" cx="${round(coords[i][0])}" cy="${round(coords[i][1])}" r="4"><title>${esc(tipFor(p))}</title></circle>`).join('');
+
+  const axisDates = [0, 0.5, 1].map((f, k) => {
+    const d = Math.round(firstDay + dayRange * f);
+    if (dayRange === 0 && k > 0) return '';
+    const anchor = k === 0 ? 'start' : k === 2 ? 'end' : 'middle';
+    const x = k === 0 ? pad.left : k === 2 ? pad.left + plotW : xAt(d);
+    return `<text class="ax" x="${round(x)}" y="${height - 8}" text-anchor="${anchor}">${esc(dayText(d))}</text>`;
+  }).join('');
+
+  const data = esc(JSON.stringify(points.map((p, i) => ({ x: round(coords[i][0]), y: round(coords[i][1]), t: tipFor(p) }))));
+  return `<figure class="chart-fig chart-hover" data-chart-points="${data}" data-chart-width="${width}">
+    <figcaption>${esc(title)}</figcaption>
+    <svg class="chart" viewBox="0 0 ${width} ${height}" role="img"
+         aria-label="${esc(title)}: ${points.length} readings from ${esc(Number(points[0].y).toFixed(1))} to ${esc(Number(points.at(-1).y).toFixed(1))} ${esc(unit)}">
+      ${grid}${area}${path}<line class="guide" x1="0" y1="${pad.top}" x2="0" y2="${bottomY}" hidden/>${marks}${axisDates}
+    </svg>
+    <div class="chart-tip" role="status" hidden></div>
+  </figure>`;
+}
+
+/* Pure: which point is closest to an x position, in the chart's own units. */
+export function nearestPoint(xs, x) {
+  let best = -1;
+  let bestGap = Infinity;
+  xs.forEach((px, i) => {
+    const gap = Math.abs(px - x);
+    if (gap < bestGap) { best = i; bestGap = gap; }
+  });
+  return best;
+}
+
+/* Shows the tooltip box for the dot nearest the pointer, and hides it when the
+   pointer leaves. Called with a figure.chart-hover and a clientX; null hides. */
+export function hoverChart(fig, clientX) {
+  const svg = fig.querySelector('svg');
+  const tip = fig.querySelector('.chart-tip');
+  const guide = fig.querySelector('.guide');
+  const dots = fig.querySelectorAll('.dot');
+  const clear = () => {
+    tip.hidden = true;
+    guide.setAttribute('hidden', '');
+    dots.forEach((d) => d.classList.remove('on'));
+  };
+  if (clientX === null) { clear(); return; }
+
+  const pts = JSON.parse(fig.dataset.chartPoints);
+  const box = svg.getBoundingClientRect();
+  const scale = Number(fig.dataset.chartWidth) / box.width;
+  const i = nearestPoint(pts.map((p) => p.x), (clientX - box.left) * scale);
+  if (i < 0) { clear(); return; }
+
+  dots.forEach((d, k) => d.classList.toggle('on', k === i));
+  guide.setAttribute('x1', pts[i].x);
+  guide.setAttribute('x2', pts[i].x);
+  guide.removeAttribute('hidden');
+  tip.textContent = pts[i].t;
+  tip.hidden = false;
+  const figBox = fig.getBoundingClientRect();
+  const want = box.left - figBox.left + pts[i].x / scale - tip.offsetWidth / 2;
+  tip.style.left = `${Math.max(0, Math.min(want, figBox.width - tip.offsetWidth))}px`;
+  tip.style.top = `${box.top - figBox.top + pts[i].y / scale - tip.offsetHeight - 12}px`;
+}
