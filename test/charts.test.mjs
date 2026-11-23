@@ -214,3 +214,13 @@ test('the trend option draws one fitted line and is off by default', () => {
   assertClassesStyled(svg);
   assert.doesNotMatch(weightChart([readings[0]], { title: 'w', trend: true }), /trendline|NaN/);
 });
+
+test('the average option draws a horizontal line at the mean, off by default', () => {
+  assert.doesNotMatch(weightChart(readings, { title: 'w' }), /avgline/);
+  const svg = weightChart(readings, { title: 'w', unit: 'kg', average: true });
+  assert.equal([...svg.matchAll(/class="avgline"/g)].length, 1);
+  assert.match(svg, /avg 80\.5 kg/);
+  const [, y1, y2] = svg.match(/class="avgline" x1="[\d.]+" y1="([\d.]+)" x2="[\d.]+" y2="([\d.]+)"/);
+  assert.equal(y1, y2);
+  assertClassesStyled(svg);
+});

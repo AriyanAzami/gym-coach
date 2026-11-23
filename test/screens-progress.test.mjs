@@ -186,3 +186,17 @@ test('the Trend button toggles a trend line over the chart', () => {
   assert.match(on, /data-action="body-trend"[^>]*aria-pressed="true"/);
   render({ bodyTrend: false });
 });
+
+test('the Average button toggles the average line', () => {
+  const today = ymd(new Date());
+  reset({ bodyMetrics: [
+    { date: today, weight: 91.0, unit: 'kg' },
+    { date: addDays(today, -10), weight: 90.0, unit: 'kg' },
+  ] });
+  assert.doesNotMatch(render({ bodyAverage: false }), /class="avgline"/);
+  const on = render({ bodyAverage: true });
+  assert.match(on, /class="avgline"/);
+  assert.match(on, /avg 90\.5 kg/);
+  assert.match(on, /data-action="body-average"[^>]*aria-pressed="true"/);
+  render({ bodyAverage: false });
+});

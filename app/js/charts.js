@@ -162,7 +162,7 @@ const shortDate = (ymd) => {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-export function weightChart(points, { title = '', unit = 'kg', width = 500, height = 210, trend = false } = {}) {
+export function weightChart(points, { title = '', unit = 'kg', width = 500, height = 210, trend = false, average = false } = {}) {
   if (!points || points.length === 0) return EMPTY(title, width, height);
 
   const pad = { top: 16, right: 14, bottom: 28, left: 40 };
@@ -212,6 +212,15 @@ export function weightChart(points, { title = '', unit = 'kg', width = 500, heig
     trendLine = `<line class="trendline" x1="${round(xAt(days[0]))}" y1="${round(clampY(at(days[0])))}" x2="${round(xAt(days.at(-1)))}" y2="${round(clampY(at(days.at(-1))))}"/>`;
   }
 
+  /* Mean of the shown readings, labelled at its right end. */
+  let avgLine = '';
+  if (average) {
+    const mean = ys.reduce((a, b) => a + b, 0) / ys.length;
+    const y = round(yAt(mean));
+    avgLine = `<line class="avgline" x1="${pad.left}" y1="${y}" x2="${pad.left + plotW}" y2="${y}"/>`
+      + `<text class="avg-label" x="${pad.left + plotW}" y="${round(Math.max(y - 5, pad.top + 8))}" text-anchor="end">avg ${mean.toFixed(1)} ${esc(unit)}</text>`;
+  }
+
   const tipFor = (p) => `${shortDate(p.date)} · ${Number(p.y).toFixed(1)} ${unit}`;
   const marks = points.map((p, i) => `<circle class="dot" data-i="${i}" cx="${round(coords[i][0])}" cy="${round(coords[i][1])}" r="4"><title>${esc(tipFor(p))}</title></circle>`).join('');
 
@@ -228,7 +237,7 @@ export function weightChart(points, { title = '', unit = 'kg', width = 500, heig
     <figcaption>${esc(title)}</figcaption>
     <svg class="chart" viewBox="0 0 ${width} ${height}" role="img"
          aria-label="${esc(title)}: ${points.length} readings from ${esc(Number(points[0].y).toFixed(1))} to ${esc(Number(points.at(-1).y).toFixed(1))} ${esc(unit)}">
-      ${grid}${area}${path}${trendLine}<line class="guide" x1="0" y1="${pad.top}" x2="0" y2="${bottomY}" hidden/>${marks}${axisDates}
+      ${grid}${area}${path}${avgLine}${trendLine}<line class="guide" x1="0" y1="${pad.top}" x2="0" y2="${bottomY}" hidden/>${marks}${axisDates}
     </svg>
     <div class="chart-tip" role="status" hidden></div>
   </figure>`;
