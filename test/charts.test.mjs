@@ -206,3 +206,11 @@ test('nearestPoint picks the closest x', () => {
   assert.equal(nearestPoint([10, 50, 300], 400), 2);
   assert.equal(nearestPoint([], 5), -1);
 });
+
+test('the trend option draws one fitted line and is off by default', () => {
+  assert.doesNotMatch(weightChart(readings, { title: 'w' }), /class="trendline"/);
+  const svg = weightChart(readings, { title: 'w', trend: true });
+  assert.equal([...svg.matchAll(/class="trendline"/g)].length, 1);
+  assertClassesStyled(svg);
+  assert.doesNotMatch(weightChart([readings[0]], { title: 'w', trend: true }), /trendline|NaN/);
+});

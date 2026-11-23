@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { state } from '../app/js/store.js';
 import { render, weightPoints } from '../app/js/screens-progress.js';
 import rulesExample from '../supabase/seed/rules.example.json' with { type: 'json' };
-import { isoWeekStart, ymd } from '../app/js/engine.js';
+import { isoWeekStart, ymd, addDays } from '../app/js/engine.js';
 
 // The volume card shows the current week, so the fixture has to be this week.
 const THIS_WEEK = isoWeekStart(ymd(new Date()));
@@ -154,4 +154,35 @@ test('weightPoints keeps one reading per day, oldest first, converted', () => {
 test('with no individual weigh-ins the weekly averages are charted', () => {
   reset({ bodyMetrics: [] });
   assert.match(render({ bodyUnit: 'kg' }), /70\.4 kg/);
+});
+
+test('the time frame dropdown filters the readings and defaults to all time', () => {
+  const today = ymd(new Date());
+  reset({ bodyMetrics: [
+    { date: today, weight: 91.0, unit: 'kg' },
+    { date: addDays(today, -40), weight: 95.5, unit: 'kg' },
+  ] });
+  const all = render({ bodyRange: 'all' });
+  assert.match(all, /<option value="all" selected>/);
+  assert.match(all, /95\.5 kg/);
+  const month = render({ bodyRange: '1m' });
+  assert.match(month, /<option value="1m" selected>/);
+  assert.doesNotMatch(month, /95\.5 kg/);
+  for (const label of ['1 week', '1 month', '3 months', '6 months', '1 year']) assert.match(month, new RegExp(label));
+  reset({ bodyMetrics: [{ date: addDays(today, -40), weight: 95.5, unit: 'kg' }] });
+  assert.match(render({ bodyRange: '1w' }), /No weigh-ins in the last 1 week/);
+  render({ bodyRange: 'all' });
+});
+
+test('the Trend button toggles a trend line over the chart', () => {
+  const today = ymd(new Date());
+  reset({ bodyMetrics: [
+    { date: today, weight: 91.0, unit: 'kg' },
+    { date: addDays(today, -10), weight: 90.0, unit: 'kg' },
+  ] });
+  assert.doesNotMatch(render({ bodyTrend: false }), /class="trendline"/);
+  const on = render({ bodyTrend: true });
+  assert.match(on, /class="trendline"/);
+  assert.match(on, /data-action="body-trend"[^>]*aria-pressed="true"/);
+  render({ bodyTrend: false });
 });

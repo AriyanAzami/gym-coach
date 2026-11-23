@@ -162,7 +162,7 @@ const shortDate = (ymd) => {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-export function weightChart(points, { title = '', unit = 'kg', width = 500, height = 210 } = {}) {
+export function weightChart(points, { title = '', unit = 'kg', width = 500, height = 210, trend = false } = {}) {
   if (!points || points.length === 0) return EMPTY(title, width, height);
 
   const pad = { top: 16, right: 14, bottom: 28, left: 40 };
@@ -199,6 +199,19 @@ export function weightChart(points, { title = '', unit = 'kg', width = 500, heig
     ? `<polyline class="series" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${pts}"/>`
     : '';
 
+  /* Least-squares line through the shown readings, by calendar day. */
+  let trendLine = '';
+  if (trend && points.length >= 2 && dayRange > 0) {
+    const n = points.length;
+    const mx = days.reduce((a, b) => a + b, 0) / n;
+    const my = ys.reduce((a, b) => a + b, 0) / n;
+    const sxx = days.reduce((a, d) => a + (d - mx) ** 2, 0);
+    const slope = days.reduce((a, d, i) => a + (d - mx) * (ys[i] - my), 0) / sxx;
+    const at = (d) => my + slope * (d - mx);
+    const clampY = (v) => Math.min(Math.max(yAt(v), pad.top), pad.top + plotH);
+    trendLine = `<line class="trendline" x1="${round(xAt(days[0]))}" y1="${round(clampY(at(days[0])))}" x2="${round(xAt(days.at(-1)))}" y2="${round(clampY(at(days.at(-1))))}"/>`;
+  }
+
   const tipFor = (p) => `${shortDate(p.date)} · ${Number(p.y).toFixed(1)} ${unit}`;
   const marks = points.map((p, i) => `<circle class="dot" data-i="${i}" cx="${round(coords[i][0])}" cy="${round(coords[i][1])}" r="4"><title>${esc(tipFor(p))}</title></circle>`).join('');
 
@@ -215,7 +228,7 @@ export function weightChart(points, { title = '', unit = 'kg', width = 500, heig
     <figcaption>${esc(title)}</figcaption>
     <svg class="chart" viewBox="0 0 ${width} ${height}" role="img"
          aria-label="${esc(title)}: ${points.length} readings from ${esc(Number(points[0].y).toFixed(1))} to ${esc(Number(points.at(-1).y).toFixed(1))} ${esc(unit)}">
-      ${grid}${area}${path}<line class="guide" x1="0" y1="${pad.top}" x2="0" y2="${bottomY}" hidden/>${marks}${axisDates}
+      ${grid}${area}${path}${trendLine}<line class="guide" x1="0" y1="${pad.top}" x2="0" y2="${bottomY}" hidden/>${marks}${axisDates}
     </svg>
     <div class="chart-tip" role="status" hidden></div>
   </figure>`;

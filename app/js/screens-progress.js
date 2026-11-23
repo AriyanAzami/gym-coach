@@ -17,11 +17,22 @@ const RANGES = [
   { key: 'all', label: 'All', days: null },
 ];
 
+const BODY_RANGES = [
+  { key: '1w', label: '1 week', days: 7 },
+  { key: '1m', label: '1 month', days: 30 },
+  { key: '3m', label: '3 months', days: 91 },
+  { key: '6m', label: '6 months', days: 182 },
+  { key: '1y', label: '1 year', days: 365 },
+  { key: 'all', label: 'All time', days: null },
+];
+
 let currentState = {
   exerciseId: null,
   range: 'all',
   month: null,
   bodyUnit: 'kg',
+  bodyRange: 'all',
+  bodyTrend: false,
 };
 
 /* Lifts worth charting: the ones with something logged. */
@@ -279,23 +290,31 @@ export function weightPoints(bodyMetrics, bodyTrend, unit) {
   return source.sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
 
-const WEIGHT_ACTIONS = (unit) => `<div class="body-actions">
+const weightActions = (unit, rangeKey, trendOn) => `<div class="body-actions">
   <div class="range-tabs" role="group" aria-label="Weight unit">${['kg', 'lb'].map((u) => `<button class="range-tab${u === unit ? ' on' : ''}" data-action="body-unit" data-unit="${u}" aria-pressed="${u === unit}">${u}</button>`).join('')}</div>
-  <label class="btn sm" style="margin:0;cursor:pointer"><input type="file" accept="image/*" multiple data-action="read-weight-shots" style="display:none">From screenshot</label>
-  <button class="btn sm" data-action="log-weight">Log weight</button>
+  <select class="body-range" data-action="body-range" aria-label="Time frame">${BODY_RANGES.map((r) => `<option value="${r.key}"${r.key === rangeKey ? ' selected' : ''}>${r.label}</option>`).join('')}</select>
+  <button class="btn sm${trendOn ? ' primary' : ''}" data-action="body-trend" aria-pressed="${trendOn}">Trend</button>
+  <span class="body-actions-right">
+    <label class="btn sm" style="margin:0;cursor:pointer"><input type="file" accept="image/*" multiple data-action="read-weight-shots" style="display:none">From screenshot</label>
+    <button class="btn sm" data-action="log-weight">Log weight</button>
+  </span>
 </div>`;
 
 function bodyCard() {
   const unit = currentState.bodyUnit === 'lb' ? 'lb' : 'kg';
-  const head = `<div class="card-title"><div><div class="eyebrow">4 · Composition</div><h3>Body weight</h3></div></div>${WEIGHT_ACTIONS(unit)}`;
+  const rangeSpec = BODY_RANGES.find((r) => r.key === currentState.bodyRange) ?? BODY_RANGES.at(-1);
+  const trendOn = currentState.bodyTrend === true;
+  const head = `<div class="card-title"><div><div class="eyebrow">4 · Composition</div><h3>Body weight</h3></div></div>${weightActions(unit, rangeSpec.key, trendOn)}`;
   const trend = [...(store.state.bodyTrend ?? [])]
     .sort((a, b) => String(a.week_start).localeCompare(String(b.week_start)));
-  const points = weightPoints(store.state.bodyMetrics, trend, unit);
-  if (trend.length === 0 && points.length === 0) {
+  const allPoints = weightPoints(store.state.bodyMetrics, trend, unit);
+  const since = rangeSpec.days === null ? null : addDays(ymd(new Date()), -rangeSpec.days);
+  const points = since === null ? allPoints : allPoints.filter((p) => p.date >= since);
+  if (trend.length === 0 && allPoints.length === 0) {
     return `<div class="card">${head}<p class="muted small">No weigh-ins yet.</p></div>`;
   }
 
-  const latestPoint = points.at(-1);
+  const latestPoint = allPoints.at(-1);
   const latest = trend.at(-1);
   const rate = trend.findLast((t) => t.rate_3w !== null && t.rate_3w !== undefined)?.rate_3w;
   const band = store.state.rules?.nutrition?.gain_band_kg_per_week;
@@ -303,7 +322,9 @@ function bodyCard() {
   const rateKg = rate === undefined || rate === null ? null : toUnit(Number(rate), rateUnit, 'kg');
   const inBand = band && rateKg !== null ? rateKg >= band[0] && rateKg <= band[1] : null;
 
-  const chart = weightChart(points, { title: 'Logged weigh-ins', unit });
+  const chart = points.length === 0
+    ? `<p class="muted small">No weigh-ins in the last ${h(rangeSpec.label.toLowerCase())}.</p>`
+    : weightChart(points, { title: 'Logged weigh-ins', unit, trend: trendOn });
   const now = latestPoint
     ? `<div class="body-now"><span class="body-now-num">${h(latestPoint.y.toFixed(1))}</span> <span class="muted">${unit} · ${h(fmtDate(latestPoint.date))}</span></div>`
     : '';
@@ -394,6 +415,8 @@ export function render(params = {}) {
   if (params.exerciseId !== undefined) currentState.exerciseId = params.exerciseId;
   if (params.range !== undefined) currentState.range = params.range;
   if (params.month !== undefined) currentState.month = params.month;
+  if (BODY_RANGES.some((r) => r.key === params.bodyRange)) currentState.bodyRange = params.bodyRange;
+  if (typeof params.bodyTrend === 'boolean') currentState.bodyTrend = params.bodyTrend;
   if (params.bodyUnit === 'kg' || params.bodyUnit === 'lb') currentState.bodyUnit = params.bodyUnit;
 
   const ym = currentState.month ?? defaultMonth();
@@ -437,6 +460,14 @@ export const actions = {
   'body-unit': (node) => {
     currentState.bodyUnit = node.dataset.unit === 'lb' ? 'lb' : 'kg';
     nav.go('progress', { ...currentState, bodyUnit: currentState.bodyUnit });
+  },
+  'body-range': (node) => {
+    currentState.bodyRange = node.value;
+    nav.go('progress', { ...currentState, bodyRange: node.value });
+  },
+  'body-trend': () => {
+    currentState.bodyTrend = !currentState.bodyTrend;
+    nav.go('progress', { ...currentState, bodyTrend: currentState.bodyTrend });
   },
   'cal-month': (node) => {
     currentState.month = node.dataset.month;
