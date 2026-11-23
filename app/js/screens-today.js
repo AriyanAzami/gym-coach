@@ -315,7 +315,10 @@ export const actions = {
   'read-weight-shots': async (node) => {
     const picked = Array.from(node.files ?? []);
     if (picked.length === 0) return;
-    const say = (text) => { const s = el('bw-status'); if (s) s.textContent = text; };
+    const say = (text) => {
+      const s = el('bw-status');
+      if (s) s.textContent = text; else toast(text);
+    };
     say('Reading the screenshots…');
     try {
       const files = await Promise.all(picked.map((f) => shrinkImage(f)));

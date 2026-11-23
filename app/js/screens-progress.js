@@ -266,7 +266,7 @@ function bodyCard() {
   const trend = [...(store.state.bodyTrend ?? [])]
     .sort((a, b) => String(a.week_start).localeCompare(String(b.week_start)));
   if (trend.length === 0) {
-    return `<div class="card"><div class="card-title"><div><div class="eyebrow">4 · Composition</div><h3>Body weight</h3></div><button class="btn sm" data-action="log-weight">Log weight</button></div>
+    return `<div class="card"><div class="card-title"><div><div class="eyebrow">4 · Composition</div><h3>Body weight</h3></div><div class="row" style="gap:6px"><label class="btn sm" style="margin:0;cursor:pointer"><input type="file" accept="image/*" multiple data-action="read-weight-shots" style="display:none">From screenshot</label><button class="btn sm" data-action="log-weight">Log weight</button></div></div>
       <p class="muted small">No weigh-ins yet.</p></div>`;
   }
 
@@ -292,7 +292,7 @@ function bodyCard() {
       inBand === null ? '' : inBand ? ' · <span class="pill must">in band</span>' : ' · <span class="pill flag">outside band</span>'}`;
 
   return `<div class="card">
-    <div class="card-title"><div><div class="eyebrow">4 · Composition</div><h3>Body weight</h3></div><button class="btn sm" data-action="log-weight">Log weight</button></div>
+    <div class="card-title"><div><div class="eyebrow">4 · Composition</div><h3>Body weight</h3></div><div class="row" style="gap:6px"><label class="btn sm" style="margin:0;cursor:pointer"><input type="file" accept="image/*" multiple data-action="read-weight-shots" style="display:none">From screenshot</label><button class="btn sm" data-action="log-weight">Log weight</button></div></div>
     ${chart}
     <div class="small" style="margin-top:8px">${rateLine}</div>
   </div>`;
